@@ -8,6 +8,7 @@ import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
+import { DELETE_DURATION } from "../constants";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 
@@ -99,18 +100,22 @@ export default function Canvas() {
         return inverse;
       }
       case "create": {
-        // Snapshot then delete created notes
+        // Snapshot then delete created notes with animation
         const currentNotes = notesRef.current;
         const snapshots = action.noteIds
           .map(id => currentNotes.find(n => n.id === id))
           .filter((n): n is Note => n !== undefined)
           .map(snapshotFromNote);
         const inverse: CanvasAction = { type: "delete", snapshots };
+        const deleteSet = new Set(action.noteIds);
+        setDeletingIds(deleteSet);
+        await new Promise(r => setTimeout(r, DELETE_DURATION * 1000));
         await db.transaction("rw", db.notes, async () => {
           for (const id of action.noteIds) {
             await db.notes.delete(id);
           }
         });
+        setDeletingIds(new Set());
         return inverse;
       }
       case "batch": {
