@@ -5,7 +5,7 @@ import type { Note } from "../store/db";
 const CARD_W = 800;
 const CARD_H = 1131;
 const CARD_CONTENT_W = 600;
-const CARD_RADIUS = 16;
+const CARD_RADIUS = 100;
 
 interface Props {
   note: Note;
@@ -16,6 +16,7 @@ interface Props {
   windowH: number;
   isOpen: boolean;
   openProgress: number;
+  closingScrollOffset: number;
   onTap: () => void;
   onClose: () => void;
   onDragMove: (noteId: string, dx: number, dy: number) => void;
@@ -37,6 +38,7 @@ export default function NoteCard({
   windowH,
   isOpen,
   openProgress,
+  closingScrollOffset,
   onTap,
   onClose,
   onDragMove,
@@ -46,23 +48,63 @@ export default function NoteCard({
 }: Props) {
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [dragRotation, setDragRotation] = useState(0);
   const dragStart = useRef<{ px: number; py: number; noteX: number; noteY: number } | null>(null);
+  const lastMoveRef = useRef<{ x: number; time: number }>({ x: 0, time: 0 });
+
+  // Spring physics for rotation — two modes matching Swift
+  // Drag:    interactiveSpring(response: 0.15, dampingFraction: 0.6) → stiff=1750, damp=50
+  // Release: spring(response: 0.4, dampingFraction: 0.7)            → stiff=246,  damp=22
+  const springRef = useRef({ current: 0, velocity: 0, target: 0, stiffness: 1750, damping: 50 });
+  const springRafRef = useRef<number>(0);
+  const MAX_ROTATION = 2;
+
+  const startSpring = useCallback(() => {
+    if (springRafRef.current) return;
+    const tick = () => {
+      const s = springRef.current;
+      const dt = 1 / 60;
+      const force = s.stiffness * (s.target - s.current) - s.damping * s.velocity;
+      s.velocity += force * dt;
+      s.current += s.velocity * dt;
+      setDragRotation(s.current);
+      if (Math.abs(s.current - s.target) > 0.001 || Math.abs(s.velocity) > 0.01) {
+        springRafRef.current = requestAnimationFrame(tick);
+      } else {
+        s.current = s.target;
+        setDragRotation(s.target);
+        springRafRef.current = 0;
+      }
+    };
+    springRafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   const isImageCard = note.kind === "image";
   const cardW = isImageCard ? CARD_CONTENT_W : CARD_W;
   const cardH = isImageCard && note.imageAspect > 0 ? CARD_CONTENT_W * note.imageAspect : CARD_H;
 
   const t = openProgress;
-  const w = lerp(cardW, windowW, t);
-  const h = lerp(cardH, windowH, t);
   const scl = lerp(scale, 1, t);
-  const radius = isImageCard ? 0 : lerp(CARD_RADIUS, 0, t);
+  // Accelerated progress for bg/radius/shadow — gone by ~33% of animation
+  const tFast = t;
 
+  // Visual position: lerp the top-left corner directly for a straight-line trajectory
   const liveMidX = windowW / 2 + note.positionX * scale + offsetX;
   const liveMidY = windowH / 2 + note.positionY * scale + offsetY;
-  const cx = lerp(liveMidX, windowW / 2, t);
-  const cy = lerp(liveMidY, windowH / 2, t);
-  const editing = openProgress > 0.9;
+  // Start: visual top-left in canvas | End: card centered horizontally, top at y=0
+  const startLeft = liveMidX - (cardW * scale) / 2;
+  const startTop = liveMidY - (cardH * scale) / 2;
+  const endLeft = (windowW - cardW) / 2;
+  const endTop = 0;
+  const visualLeft = lerp(startLeft, endLeft, t);
+  const visualTop = lerp(startTop, endTop, t);
+  const editing = openProgress >= 1;
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // During close, content slides from scrolled position back to top
+  const closingScrollY = !editing && openProgress > 0 && closingScrollOffset > 0
+    ? -closingScrollOffset * openProgress
+    : 0;
 
   // ── Drag ──
   const handlePointerDown = useCallback(
@@ -83,9 +125,21 @@ export default function NoteCard({
       const dy = (e.clientY - dragStart.current.py) / scale;
       if (!isDragging && Math.abs(dx) + Math.abs(dy) > 4 / scale) {
         setIsDragging(true);
+        lastMoveRef.current = { x: e.clientX, time: performance.now() };
       }
       if (isDragging || Math.abs(dx) + Math.abs(dy) > 4 / scale) {
         onDragMove(note.id, dragStart.current.noteX + dx, dragStart.current.noteY + dy);
+        // Velocity-based rotation (matching Swift interactiveSpring)
+        const now = performance.now();
+        const dt = Math.max(now - lastMoveRef.current.time, 1);
+        const vx = (e.clientX - lastMoveRef.current.x) / dt;
+        const vxPerSec = vx * 1000; // convert px/ms to px/s
+        const target = Math.max(-MAX_ROTATION, Math.min(MAX_ROTATION, (vxPerSec / 800) * MAX_ROTATION));
+        springRef.current.stiffness = 200;
+        springRef.current.damping = 12;
+        springRef.current.target = target;
+        startSpring();
+        lastMoveRef.current = { x: e.clientX, time: now };
       }
     },
     [scale, isDragging, note.id, onDragMove]
@@ -103,105 +157,149 @@ export default function NoteCard({
       }
       dragStart.current = null;
       setIsDragging(false);
+      // Softer spring for return (matches Swift .spring(response: 0.4, dampingFraction: 0.7))
+      springRef.current.stiffness = 80;
+      springRef.current.damping = 6;
+      springRef.current.target = 0;
+      startSpring();
     },
     [note.id, onTap, onDragEnd]
   );
 
-  const showEditor = isOpen || openProgress > 0;
-
   return (
+    <>
     <div
       className="absolute select-none pointer-events-auto"
       style={{
-        left: cx - (w * scl) / 2,
-        top: cy - (h * scl) / 2,
-        width: w,
-        height: h,
-        transform: `scale(${scl})`,
-        transformOrigin: "top left",
-        borderRadius: radius,
+        left: visualLeft,
+        top: visualTop,
+        width: cardW * scl,
+        height: cardH * scl,
+        borderRadius: CARD_RADIUS * scl * (1 - tFast),
         overflow: "hidden",
         cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
-        zIndex: isOpen ? 9999 : note.zOrder,
-        transition: isDragging ? "none" : "box-shadow 0.2s ease",
-        boxShadow: isDragging
-          ? "0 30px 80px rgba(0,0,0,0.3)"
-          : isHovered && !isOpen
-            ? "0 20px 60px rgba(0,0,0,0.25)"
-            : "0 4px 20px rgba(0,0,0,0.15)",
+        zIndex: openProgress > 0 ? 9999 : note.zOrder,
+        transform: isDragging
+          ? `rotate(${dragRotation}deg)`
+          : isHovered && t < 0.1
+            ? "scale(1.02)"
+            : "none",
+        transformOrigin: isDragging ? "top center" : "center",
+        transition: isDragging ? "none" : "transform 0.15s ease-out",
+        filter: t > 0
+          ? "none"
+          : isDragging
+            ? `drop-shadow(0 ${20 * scl}px ${20 * scl}px rgba(0,0,0,0.08))`
+            : isHovered
+              ? `drop-shadow(0 ${20 * scl}px ${20 * scl}px rgba(0,0,0,0.05))`
+              : `drop-shadow(0 ${4 * scl}px ${5 * scl}px rgba(0,0,0,0.05))`,
+        willChange: t > 0 || isDragging ? "transform" : "auto",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onMouseEnter={() => !isOpen && setIsHovered(true)}
+      onMouseEnter={() => !isOpen && t < 0.1 && setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Card background */}
-      {!isImageCard && (
-        <div
-          className="absolute inset-0 transition-colors duration-300"
-          style={{
-            borderRadius: radius,
-            background: isOpen ? "var(--color-card-open)" : "var(--color-card)",
-          }}
-        />
-      )}
+      {/* Inner wrapper — scales content from cardW×cardH to fit the visual box */}
+      <div
+        style={{
+          width: cardW,
+          height: cardH,
+          transform: `scale(${scl})`,
+          transformOrigin: "top left",
+        }}
+      >
+        {/* Card background */}
+        {!isImageCard && (
+          <div
+            className="absolute inset-0"
+            style={{
+              borderRadius: CARD_RADIUS * (1 - t),
+              background: `color-mix(in srgb, var(--color-card) ${Math.round((1 - t) * 100)}%, #ffffff)`,
+            }}
+          />
+        )}
 
-      {/* Image card thumbnail */}
-      {isImageCard && note.imageDataUrl && openProgress < 0.01 && (
-        <img
-          src={note.imageDataUrl}
-          alt=""
-          className="absolute top-0 left-0 object-cover pointer-events-none"
-          style={{ width: cardW, height: cardH }}
-          draggable={false}
-        />
-      )}
+        {/* Image card thumbnail */}
+        {isImageCard && note.imageDataUrl && openProgress < 0.01 && (
+          <img
+            src={note.imageDataUrl}
+            alt=""
+            className="absolute top-0 left-0 object-cover pointer-events-none"
+            style={{ width: cardW, height: cardH }}
+            draggable={false}
+          />
+        )}
 
-      {/* Editor content */}
-      {showEditor && (
-        <div
-          className="absolute inset-0 overflow-y-auto p-10"
-          style={{
-            opacity: openProgress < 0.01 ? 0 : 1,
-            pointerEvents: editing ? "auto" : "none",
-          }}
-        >
+        {/* Editor content (card mode — clipped) */}
+        {!editing && (
+          <div
+            className="absolute inset-0 flex justify-center"
+            style={{
+              pointerEvents: "none",
+              paddingTop: 150,
+              transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
+            }}
+          >
+            <div style={{ width: CARD_CONTENT_W }}>
+              {children}
+            </div>
+          </div>
+        )}
+
+        {/* Fade gradient (card mode) */}
+        {!isImageCard && openProgress < 0.1 && (
+          <div
+            className="absolute bottom-0 left-0 right-0 pointer-events-none"
+            style={{
+              height: 120,
+              background: "linear-gradient(to bottom, transparent, var(--color-card))",
+              opacity: 1 - openProgress * 10,
+              borderRadius: `0 0 ${CARD_RADIUS}px ${CARD_RADIUS}px`,
+            }}
+          />
+        )}
+      </div>
+    </div>
+    {/* Back button — slides in from left */}
+    {openProgress > 0 && (
+      <button
+        className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm"
+        style={{
+          zIndex: 10001,
+          left: lerp(-50, 20, t),
+          opacity: t,
+          background: "rgba(128,128,128,0.15)",
+          color: "var(--color-text-muted)",
+        }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
+        ‹
+      </button>
+    )}
+    {/* Editor content (open mode — full screen scroll, scrollbar at browser edge) */}
+    {editing && (
+      <div
+        ref={scrollRef}
+        data-editor-overlay
+        className="fixed inset-0 overflow-y-auto flex justify-center"
+        style={{
+          zIndex: 10000,
+          paddingTop: 150,
+          paddingBottom: 40,
+        }}
+      >
+        <div style={{ width: CARD_CONTENT_W }}>
           {children}
         </div>
-      )}
-
-      {/* Fade gradient (card mode, note cards) */}
-      {!isImageCard && openProgress < 0.1 && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-30 pointer-events-none"
-          style={{
-            background: "linear-gradient(to bottom, transparent, var(--color-card))",
-            opacity: 1 - openProgress * 10,
-            borderRadius: `0 0 ${radius}px ${radius}px`,
-          }}
-        />
-      )}
-
-      {/* Back button */}
-      {openProgress > 0.1 && (
-        <button
-          className="absolute top-14 left-4 w-8 h-8 rounded-full border-none flex items-center justify-center text-lg cursor-pointer z-10 backdrop-blur-sm transition-colors"
-          style={{
-            opacity: openProgress,
-            background: "rgba(128,128,128,0.3)",
-            color: "var(--color-text-muted)",
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          ‹
-        </button>
-      )}
-    </div>
+      </div>
+    )}
+    </>
   );
 }
 

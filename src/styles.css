@@ -34,29 +34,59 @@ html, body, #root {
   color: var(--color-text-primary);
 }
 
-/* ── TipTap prose styling (can't be utility-only) ── */
-.tiptap { @apply outline-none min-h-full pb-50; }
-.tiptap > *:first-child { @apply mt-0; }
-
-.tiptap h1 { @apply text-4xl font-bold leading-tight mb-2; }
-.tiptap h2 { @apply text-3xl font-semibold leading-snug mb-1.5; }
-.tiptap h3 { @apply text-xl font-semibold leading-snug mb-1.5; }
-.tiptap p  { @apply text-base leading-relaxed mb-1; }
-
-.tiptap ul, .tiptap ol { @apply pl-6 mb-1; }
-.tiptap li { @apply leading-relaxed; }
-
-.tiptap blockquote {
-  @apply border-l-3 border-accent pl-4 ml-0 italic;
-  color: var(--color-text-muted);
+::selection {
+  background: rgba(0, 0, 0, 0.08);
 }
 
-/* Task list */
-.tiptap ul[data-type="taskList"] { @apply list-none pl-0; }
-.tiptap ul[data-type="taskList"] li { @apply flex items-start gap-2; }
-.tiptap ul[data-type="taskList"] li label { @apply mt-0.5; }
+.tiptap strong { font-weight: 700; }
+
+/* ── TipTap prose styling (can't be utility-only) ── */
+.tiptap { @apply outline-none min-h-full pb-20; }
+.tiptap > *:first-child { @apply mt-0; }
+
+/* Headings — larger margin-top for clear separation */
+.tiptap h1 { font-size: 56px; font-weight: 600; line-height: 1.2; margin-top: 40px; margin-bottom: 16px; padding-top: 0.05em; }
+.tiptap h2 { font-size: 36px; font-weight: 600; line-height: 1.25; margin-top: 36px; margin-bottom: 16px; }
+.tiptap h3 { font-size: 24px; font-weight: 600; line-height: 1.25; margin-top: 32px; margin-bottom: 16px; }
+
+/* Body — regular weight (400) */
+.tiptap p  { font-size: 16px; font-weight: 400; line-height: 26px; margin-bottom: 14px; }
+
+/* Lists — aligned with checkboxes, no indent */
+.tiptap ul, .tiptap ol { padding-left: 0; margin-bottom: 24px; list-style: none; }
+.tiptap li { line-height: 26px; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 8px; }
+.tiptap ul:not([data-type="taskList"]) li::before { content: "•"; color: #c8c8c8; flex-shrink: 0; width: 16px; text-align: left; font-size: 28px; line-height: 26px; margin-top: -2px; }
+.tiptap li p { margin-bottom: 0; }
+
+/* Blockquote — thinner bar, black text, stronger vertical spacing */
+.tiptap blockquote {
+  border-left: 2px solid #9ca3af;
+  padding-left: 16px;
+  margin-left: 0;
+  margin-top: 28px;
+  margin-bottom: 28px;
+  color: var(--color-text-primary);
+}
+
+/* Task list — checkbox styled like Swift app */
+.tiptap ul[data-type="taskList"] { list-style: none; padding-left: 0; margin-bottom: 16px; }
+.tiptap ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 8px; line-height: 24px; margin-bottom: 2px; }
+.tiptap ul[data-type="taskList"] li label { margin-top: 5px; }
 .tiptap ul[data-type="taskList"] li input[type="checkbox"] {
-  @apply w-4 h-4 cursor-pointer accent-accent;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 5px;
+  border: 1px solid #d1d1d1;
+  background: #ededed;
+  cursor: pointer;
+  margin: 0;
+}
+.tiptap ul[data-type="taskList"] li input[type="checkbox"]:checked {
+  background: #1a1a1a;
+  border-color: #1a1a1a;
 }
 
 /* Placeholder */

@@ -41,14 +41,17 @@ export function useCanvas() {
   );
 
   const zoom = useCallback(
-    (delta: number, cx: number, cy: number) => {
+    (delta: number, cx: number, cy: number, windowW: number, windowH: number) => {
       setTransform((t) => {
-        const factor = Math.pow(0.995, delta);
+        const factor = Math.pow(0.988, delta);
         const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor));
-        // Zoom towards cursor
+        // Cursor position relative to canvas center
+        const cursorFromCenterX = cx - windowW / 2;
+        const cursorFromCenterY = cy - windowH / 2;
+        // Zoom towards cursor: adjust offset so the point under the cursor stays fixed
         const ratio = newScale / t.scale;
-        const newOffsetX = cx - ratio * (cx - t.offsetX);
-        const newOffsetY = cy - ratio * (cy - t.offsetY);
+        const newOffsetX = cursorFromCenterX - ratio * (cursorFromCenterX - t.offsetX);
+        const newOffsetY = cursorFromCenterY - ratio * (cursorFromCenterY - t.offsetY);
         const next = { offsetX: newOffsetX, offsetY: newOffsetY, scale: newScale };
         scheduleSave(next);
         return next;

@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from "@tiptap/react";
+import { DOMParser } from "@tiptap/pm/model";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -10,27 +11,37 @@ import type { NoteBlock, BlockType } from "../store/db";
 // ── Convert between our NoteBlock model and TipTap JSON ──
 
 function blocksToHtml(blocks: NoteBlock[]): string {
-  return blocks
-    .map((b) => {
-      const c = escapeHtml(b.content);
-      switch (b.type) {
-        case "heading1":
-          return `<h1>${c}</h1>`;
-        case "heading2":
-          return `<h2>${c}</h2>`;
-        case "heading3":
-          return `<h3>${c}</h3>`;
-        case "bulletList":
-          return `<ul><li><p>${c}</p></li></ul>`;
-        case "todo":
-          return `<ul data-type="taskList"><li data-type="taskItem" data-checked="${b.isChecked}">${c}</li></ul>`;
-        case "quote":
-          return `<blockquote><p>${c}</p></blockquote>`;
-        default:
-          return `<p>${c || ""}</p>`;
+  const parts: string[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    const c = escapeHtml(b.content);
+    if (b.type === "bulletList") {
+      // Group consecutive bullet items into one <ul>
+      let items = `<li><p>${c}</p></li>`;
+      while (++i < blocks.length && blocks[i].type === "bulletList") {
+        items += `<li><p>${escapeHtml(blocks[i].content)}</p></li>`;
       }
-    })
-    .join("");
+      parts.push(`<ul>${items}</ul>`);
+    } else if (b.type === "todo") {
+      // Group consecutive todo items into one <ul data-type="taskList">
+      let items = `<li data-type="taskItem" data-checked="${b.isChecked}"><p>${c}</p></li>`;
+      while (++i < blocks.length && blocks[i].type === "todo") {
+        items += `<li data-type="taskItem" data-checked="${blocks[i].isChecked}"><p>${escapeHtml(blocks[i].content)}</p></li>`;
+      }
+      parts.push(`<ul data-type="taskList">${items}</ul>`);
+    } else {
+      switch (b.type) {
+        case "heading1": parts.push(`<h1>${c}</h1>`); break;
+        case "heading2": parts.push(`<h2>${c}</h2>`); break;
+        case "heading3": parts.push(`<h3>${c}</h3>`); break;
+        case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
+        default: parts.push(`<p>${c || ""}</p>`);
+      }
+      i++;
+    }
+  }
+  return parts.join("");
 }
 
 function escapeHtml(s: string): string {
@@ -101,6 +112,77 @@ function textContent(node: Record<string, unknown>): string {
   return children.map(textContent).join("");
 }
 
+// ── Markdown paste parsing ──
+
+function markdownToHtml(md: string): string {
+  const lines = md.split("\n");
+  const htmlParts: string[] = [];
+  let inList = false;
+  let inTaskList = false;
+
+  function flushList() {
+    if (inList) { htmlParts.push("</ul>"); inList = false; }
+    if (inTaskList) { htmlParts.push("</ul>"); inTaskList = false; }
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+
+    // Headings
+    const headingMatch = line.match(/^(#{1,3})\s+(.*)/);
+    if (headingMatch) {
+      flushList();
+      const level = headingMatch[1].length;
+      htmlParts.push(`<h${level}>${escapeHtml(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    // Task items: - [ ] or - [x] or [ ] or [x]
+    const taskMatch = line.match(/^[-*]?\s*\[([xX ])\]\s*(.*)/);
+    if (taskMatch) {
+      if (inList) { htmlParts.push("</ul>"); inList = false; }
+      if (!inTaskList) { htmlParts.push('<ul data-type="taskList">'); inTaskList = true; }
+      const checked = taskMatch[1].toLowerCase() === "x";
+      htmlParts.push(`<li data-type="taskItem" data-checked="${checked}"><p>${escapeHtml(taskMatch[2])}</p></li>`);
+      continue;
+    }
+
+    // Bullet list items
+    const bulletMatch = line.match(/^[-*]\s+(.*)/);
+    if (bulletMatch) {
+      if (inTaskList) { htmlParts.push("</ul>"); inTaskList = false; }
+      if (!inList) { htmlParts.push("<ul>"); inList = true; }
+      htmlParts.push(`<li><p>${escapeHtml(bulletMatch[1])}</p></li>`);
+      continue;
+    }
+
+    // Blockquote
+    const quoteMatch = line.match(/^>\s*(.*)/);
+    if (quoteMatch) {
+      flushList();
+      htmlParts.push(`<blockquote><p>${escapeHtml(quoteMatch[1])}</p></blockquote>`);
+      continue;
+    }
+
+    // Empty line
+    if (line.trim() === "") {
+      flushList();
+      continue;
+    }
+
+    // Plain paragraph
+    flushList();
+    htmlParts.push(`<p>${escapeHtml(line)}</p>`);
+  }
+
+  flushList();
+  return htmlParts.join("");
+}
+
+function looksLikeMarkdown(text: string): boolean {
+  return /^#{1,3}\s|^[-*]\s|^>\s|^\[[ xX]\]/m.test(text);
+}
+
 // ── Slash command handling ──
 
 const SLASH_COMMANDS: { label: string; type: BlockType; shortcut: string }[] = [
@@ -149,6 +231,21 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       hideSlashMenu();
     },
     editorProps: {
+      handlePaste: (view, event) => {
+        const text = event.clipboardData?.getData("text/plain");
+        if (text && looksLikeMarkdown(text)) {
+          event.preventDefault();
+          const converted = markdownToHtml(text);
+          const parser = DOMParser.fromSchema(view.state.schema);
+          const tempDiv = document.createElement("div");
+          tempDiv.innerHTML = converted;
+          const slice = parser.parseSlice(tempDiv);
+          const tr = view.state.tr.replaceSelection(slice);
+          view.dispatch(tr);
+          return true;
+        }
+        return false;
+      },
       handleKeyDown: (_view, event) => {
         if (event.key === "/" && slashMenuRef.current?.style.display !== "block") {
           setTimeout(() => showSlashMenu(), 0);

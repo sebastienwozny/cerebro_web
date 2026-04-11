@@ -1,33 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import gsap from "gsap";
 import { useNotes } from "../store/useNotes";
 import { useCanvas } from "../store/useCanvas";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 
-// ── Animated value with ease-out cubic ──
-function useAnimatedValue(target: number, duration = 500) {
-  const [value, setValue] = useState(target);
-  const rafRef = useRef(0);
-  const startRef = useRef({ time: 0, from: target, to: target });
-
-  useEffect(() => {
-    const start = performance.now();
-    startRef.current = { time: start, from: value, to: target };
-
-    function tick(now: number) {
-      const elapsed = now - startRef.current.time;
-      const t = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      setValue(startRef.current.from + (startRef.current.to - startRef.current.from) * eased);
-      if (t < 1) rafRef.current = requestAnimationFrame(tick);
-    }
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, duration]);
-
-  return value;
-}
+const OPEN_DURATION = 0.5;
+const CLOSE_DURATION = 0.45;
 
 export default function Canvas() {
   const { notes, addNote, updateNote, bringToFront } = useNotes();
@@ -36,10 +15,14 @@ export default function Canvas() {
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
-  const [openTarget, setOpenTarget] = useState(0);
-  const openProgress = useAnimatedValue(openTarget, 450);
+  const [openProgress, setOpenProgress] = useState(0);
+  const [closingScrollOffset, setClosingScrollOffset] = useState(0);
+  const progressRef = useRef({ value: 0 });
+  const tweenRef = useRef<gsap.core.Tween | null>(null);
 
   const canvasLocked = openNoteId !== null;
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  const spacePanRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
     const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
@@ -47,15 +30,35 @@ export default function Canvas() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // ── Space + drag to pan ──
+  useEffect(() => {
+    if (canvasLocked) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Space" && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
+        e.preventDefault();
+        setSpaceHeld(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") setSpaceHeld(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
+  }, [canvasLocked]);
+
   // ── Wheel: pan + pinch-zoom ──
   const handleWheel = useCallback(
     (e: WheelEvent) => {
-      e.preventDefault();
       if (canvasLocked) return;
+      e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        zoom(e.deltaY, e.clientX, e.clientY);
+        zoom(e.deltaY, e.clientX, e.clientY, windowSize.w, windowSize.h);
       } else {
-        pan(-e.deltaX, -e.deltaY);
+        pan(-e.deltaX * 1.3, -e.deltaY * 1.3);
       }
     },
     [pan, zoom, canvasLocked]
@@ -64,9 +67,10 @@ export default function Canvas() {
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+    if (canvasLocked) return;
     el.addEventListener("wheel", handleWheel, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel);
-  }, [handleWheel]);
+  }, [handleWheel, canvasLocked]);
 
   // ── Double-click to create ──
   const handleDoubleClick = useCallback(
@@ -80,19 +84,33 @@ export default function Canvas() {
     [addNote, canvasLocked, transform, windowSize]
   );
 
-  // ── Open / close ──
+  // ── Open / close with GSAP ──
   const openNote = useCallback(
     (id: string) => {
       bringToFront(id);
       setOpenNoteId(id);
-      setOpenTarget(1);
+      tweenRef.current?.kill();
+      tweenRef.current = gsap.to(progressRef.current, {
+        value: 1,
+        duration: OPEN_DURATION,
+        ease: "power3.out",
+        onUpdate: () => setOpenProgress(progressRef.current.value),
+      });
     },
     [bringToFront]
   );
 
   const closeNote = useCallback(() => {
-    setOpenTarget(0);
-    setTimeout(() => setOpenNoteId(null), 500);
+    const scrollEl = document.querySelector("[data-editor-overlay]") as HTMLElement | null;
+    setClosingScrollOffset(scrollEl?.scrollTop ?? 0);
+    tweenRef.current?.kill();
+    tweenRef.current = gsap.to(progressRef.current, {
+      value: 0,
+      duration: CLOSE_DURATION,
+      ease: "power3.out",
+      onUpdate: () => setOpenProgress(progressRef.current.value),
+      onComplete: () => { setOpenNoteId(null); setClosingScrollOffset(0); },
+    });
   }, []);
 
   useEffect(() => {
@@ -113,20 +131,49 @@ export default function Canvas() {
 
   const handleDragEnd = useCallback((_noteId: string) => {}, []);
 
-  const showBackdrop = openNoteId !== null && openProgress > 0;
+  const handleSpacePanDown = useCallback(
+    (e: React.PointerEvent) => {
+      if (!spaceHeld || canvasLocked) return;
+      e.preventDefault();
+      spacePanRef.current = { startX: e.clientX, startY: e.clientY, offsetX: transform.offsetX, offsetY: transform.offsetY };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    [spaceHeld, canvasLocked, transform.offsetX, transform.offsetY]
+  );
+
+  const handleSpacePanMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!spacePanRef.current) return;
+      const dx = e.clientX - spacePanRef.current.startX;
+      const dy = e.clientY - spacePanRef.current.startY;
+      pan(dx - (transform.offsetX - spacePanRef.current.offsetX), dy - (transform.offsetY - spacePanRef.current.offsetY));
+    },
+    [pan, transform.offsetX, transform.offsetY]
+  );
+
+  const handleSpacePanUp = useCallback(() => {
+    spacePanRef.current = null;
+  }, []);
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full relative overflow-hidden"
+      style={{ background: "var(--color-canvas)", cursor: spaceHeld ? (spacePanRef.current ? "grabbing" : "grab") : "default" }}
       onDoubleClick={handleDoubleClick}
+      onPointerDown={handleSpacePanDown}
+      onPointerMove={handleSpacePanMove}
+      onPointerUp={handleSpacePanUp}
     >
-      {/* Backdrop */}
-      {showBackdrop && (
+      {/* White overlay — covers all cards during open/close */}
+      {openProgress > 0 && (
         <div
-          className="fixed inset-0 z-[9998]"
-          style={{ background: "var(--color-canvas)", opacity: openProgress * 0.8 }}
-          onClick={closeNote}
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "#ffffff",
+            opacity: openProgress,
+            zIndex: 9998,
+          }}
         />
       )}
 
@@ -135,8 +182,12 @@ export default function Canvas() {
         const isThisOpen = note.id === openNoteId;
         const thisProgress = isThisOpen ? openProgress : 0;
 
+        const otherOpacity = !isThisOpen && openNoteId ? 1 - openProgress : 1;
+
         return (
-          <div key={note.id} data-notecard>
+          <div key={note.id} data-notecard style={{
+            opacity: otherOpacity,
+          }}>
             <NoteCard
               note={note}
               scale={transform.scale}
@@ -144,8 +195,9 @@ export default function Canvas() {
               offsetY={transform.offsetY}
               windowW={windowSize.w}
               windowH={windowSize.h}
-              isOpen={isThisOpen && openTarget === 1}
+              isOpen={isThisOpen && openProgress > 0.5}
               openProgress={thisProgress}
+              closingScrollOffset={isThisOpen ? closingScrollOffset : 0}
               onTap={() => openNote(note.id)}
               onClose={closeNote}
               onDragMove={handleDragMove}
@@ -158,7 +210,7 @@ export default function Canvas() {
                   const title = blocks[0]?.content ?? "";
                   updateNote(note.id, { blocks, title });
                 }}
-                editable={isThisOpen && openProgress > 0.9}
+                editable={isThisOpen && openProgress >= 1}
                 headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
               />
             </NoteCard>
