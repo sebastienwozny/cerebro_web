@@ -15,6 +15,7 @@ interface Props {
   isSelected: boolean;
   isDeleting: boolean;
   isPopping?: boolean;
+  isAnimating?: boolean;
   openProgress: number;
   closingScrollOffset: number;
   hoverSuppressed: boolean;
@@ -38,7 +39,7 @@ function lerp(a: number, b: number, t: number) {
 
 export default function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, isPopping, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
   children,
 }: Props) {
@@ -120,7 +121,7 @@ export default function NoteCard({
           cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
           zIndex: openProgress > 0 ? 9999 : note.zOrder,
           transform: isDeleting
-            ? "translate3d(0,0,0) scale(0) rotate(12deg)"
+            ? "translate3d(0,0,0) scale(0)"
             : isDragging || isFollowing
                 ? `translate3d(0,0,0) rotate(${rotation}deg)`
                 : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
@@ -130,8 +131,12 @@ export default function NoteCard({
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
-            ? "transform 0.45s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) 0.15s"
-            : isDragging || isFollowing ? "opacity 0.3s ease-out" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+            ? "transform 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19)"
+            : isDragging || isFollowing
+              ? "opacity 0.3s ease-out"
+              : isAnimating
+                ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out, box-shadow 0.15s ease-out"
+                : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
           boxShadow: t > 0
             ? "none"
             : isSelected && openProgress < 0.1

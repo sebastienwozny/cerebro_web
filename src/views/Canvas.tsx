@@ -7,8 +7,11 @@ import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
+
+const undoStack = new CanvasUndoStack();
 
 export default function Canvas() {
   const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
@@ -33,6 +36,7 @@ export default function Canvas() {
   // Delete animation state
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [popIds, setPopIds] = useState<Set<string>>(new Set());
+  const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
 
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
@@ -41,6 +45,7 @@ export default function Canvas() {
   // Stores start positions for ALL cards in the group (leader + followers)
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragDuplicateIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
@@ -50,9 +55,94 @@ export default function Canvas() {
 
   useEffect(() => { applyTransform(); }, [applyTransform]);
 
+  // Keep notes ref current for undo/redo
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+
+  const applyInverse = useCallback(async (action: CanvasAction): Promise<CanvasAction> => {
+    switch (action.type) {
+      case "move": {
+        // Capture current positions, then restore old ones
+        const currentNotes = notesRef.current;
+        const inverse: CanvasAction = {
+          type: "move",
+          moves: action.moves.map(m => {
+            const note = currentNotes.find(n => n.id === m.noteId);
+            return { noteId: m.noteId, oldX: note?.positionX ?? m.oldX, oldY: note?.positionY ?? m.oldY };
+          }),
+        };
+        // Enable transition before updating positions
+        const moveIds = new Set(action.moves.map(m => m.noteId));
+        setAnimatingIds(moveIds);
+        await db.transaction("rw", db.notes, async () => {
+          for (const m of action.moves) {
+            await db.notes.update(m.noteId, { positionX: m.oldX, positionY: m.oldY });
+          }
+        });
+        // Wait for CSS transition to complete
+        await new Promise(r => setTimeout(r, 380));
+        setAnimatingIds(new Set());
+        return inverse;
+      }
+      case "delete": {
+        // Re-create deleted notes
+        const ids = action.snapshots.map(s => s.id);
+        const inverse: CanvasAction = { type: "create", noteIds: ids };
+        await db.transaction("rw", db.notes, async () => {
+          for (const snap of action.snapshots) {
+            await db.notes.add(noteFromSnapshot(snap));
+          }
+        });
+        // Pop animation on restored cards
+        setPopIds(new Set(ids));
+        setTimeout(() => setPopIds(new Set()), 400);
+        return inverse;
+      }
+      case "create": {
+        // Snapshot then delete created notes
+        const currentNotes = notesRef.current;
+        const snapshots = action.noteIds
+          .map(id => currentNotes.find(n => n.id === id))
+          .filter((n): n is Note => n !== undefined)
+          .map(snapshotFromNote);
+        const inverse: CanvasAction = { type: "delete", snapshots };
+        await db.transaction("rw", db.notes, async () => {
+          for (const id of action.noteIds) {
+            await db.notes.delete(id);
+          }
+        });
+        return inverse;
+      }
+      case "batch": {
+        // Apply all sub-actions in reverse order
+        const inverses: CanvasAction[] = [];
+        for (let i = action.actions.length - 1; i >= 0; i--) {
+          inverses.push(await applyInverse(action.actions[i]));
+        }
+        return { type: "batch", actions: inverses };
+      }
+    }
+  }, []);
+
+  const performUndo = useCallback(async () => {
+    const action = undoStack.popUndo();
+    if (!action) return;
+    const inverse = await applyInverse(action);
+    undoStack.pushRedo(inverse);
+  }, [applyInverse]);
+
+  const performRedo = useCallback(async () => {
+    const action = undoStack.popRedo();
+    if (!action) return;
+    const inverse = await applyInverse(action);
+    undoStack.pushUndo(inverse);
+  }, [applyInverse]);
+
   useKeyboardShortcuts({
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
     closeNote, clearSelection, selectAll, deleteNote, openNote,
+    onUndo: performUndo, onRedo: performRedo,
+    recordAction: (action) => undoStack.record(action),
   });
 
   // Double-click to create
@@ -64,6 +154,7 @@ export default function Canvas() {
       const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
       const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
       const note = await addNote(canvasX, canvasY);
+      undoStack.record({ type: "create", noteIds: [note.id] });
       setPopIds(new Set([note.id]));
       setTimeout(() => setPopIds(new Set()), 400);
     },
@@ -121,27 +212,65 @@ export default function Canvas() {
   );
 
   const handleDragEnd = useCallback(
-    async (_noteId: string) => {
+    async (noteId: string) => {
       const starts = groupDragStartRef.current;
+      const dupeIds = dragDuplicateIdsRef.current;
       // Stop rotation immediately
       setGroupDragRotation(0);
       if (starts.size > 0) {
-        // Commit final positions to DB
         const delta = groupDragDeltaRef.current;
+        const moved = Math.abs(delta.dx) > 0.1 || Math.abs(delta.dy) > 0.1;
+        // Record undo: batch if duplication happened, otherwise just move
+        if (dupeIds.length > 0 && moved) {
+          undoStack.record({
+            type: "batch",
+            actions: [
+              { type: "create", noteIds: dupeIds },
+              { type: "move", moves: [...starts].map(([id, start]) => ({ noteId: id, oldX: start.x, oldY: start.y })) },
+            ],
+          });
+        } else if (dupeIds.length > 0) {
+          undoStack.record({ type: "create", noteIds: dupeIds });
+        } else if (moved) {
+          undoStack.record({
+            type: "move",
+            moves: [...starts].map(([id, start]) => ({ noteId: id, oldX: start.x, oldY: start.y })),
+          });
+        }
+        // Commit final positions to DB
         const promises: Promise<void>[] = [];
         for (const [id, start] of starts) {
           promises.push(updateNote(id, { positionX: start.x + delta.dx, positionY: start.y + delta.dy }));
         }
-        // Wait for DB writes to complete
         await Promise.all(promises);
-        // Wait for Dexie → useLiveQuery → React to propagate new positions
-        // The ref stays populated so cards remain pinned at startPos + delta
         await new Promise(r => setTimeout(r, 50));
+      } else if (leadStartRef.current) {
+        // Solo drag
+        const lead = leadStartRef.current;
+        const note = notesRef.current.find(n => n.id === noteId);
+        const moved = note && (Math.abs(note.positionX - lead.x) > 0.1 || Math.abs(note.positionY - lead.y) > 0.1);
+        if (dupeIds.length > 0 && moved) {
+          undoStack.record({
+            type: "batch",
+            actions: [
+              { type: "create", noteIds: dupeIds },
+              { type: "move", moves: [{ noteId, oldX: lead.x, oldY: lead.y }] },
+            ],
+          });
+        } else if (dupeIds.length > 0) {
+          undoStack.record({ type: "create", noteIds: dupeIds });
+        } else if (moved) {
+          undoStack.record({
+            type: "move",
+            moves: [{ noteId, oldX: lead.x, oldY: lead.y }],
+          });
+        }
       }
-      // NOW safe: DB positions are propagated, clearing ref won't cause a snap
+      // Clear refs
       groupDragStartRef.current = new Map();
       leadStartRef.current = null;
       groupDragDeltaRef.current = { dx: 0, dy: 0 };
+      dragDuplicateIdsRef.current = [];
       setGroupDragDelta({ dx: 0, dy: 0 });
     },
     [updateNote]
@@ -150,6 +279,7 @@ export default function Canvas() {
   const handleDragDuplicate = useCallback(
     async (noteId: string) => {
       const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
+      const createdIds: string[] = [];
       if (selectedIds.has(noteId) && selectedIds.size > 1) {
         const selected = notes.filter(n => selectedIds.has(n.id));
         let z = maxZ + 1;
@@ -163,7 +293,8 @@ export default function Canvas() {
         }
         await db.transaction("rw", db.notes, async () => {
           for (const op of dupeOps) {
-            await duplicateNote(op.note, op.z);
+            const copy = await duplicateNote(op.note, op.z);
+            createdIds.push(copy.id);
           }
           for (const op of origOps) {
             await updateNote(op.id, { zOrder: op.z });
@@ -173,11 +304,13 @@ export default function Canvas() {
         const note = notes.find(n => n.id === noteId);
         if (note) {
           await db.transaction("rw", db.notes, async () => {
-            await duplicateNote(note, maxZ + 1);
+            const copy = await duplicateNote(note, maxZ + 1);
+            createdIds.push(copy.id);
             await updateNote(noteId, { zOrder: maxZ + 2 });
           });
         }
       }
+      dragDuplicateIdsRef.current = createdIds;
     },
     [notes, selectedIds, duplicateNote, updateNote]
   );
@@ -255,6 +388,7 @@ export default function Canvas() {
                 isSelected={selectedIds.has(note.id)}
                 isDeleting={deletingIds.has(note.id)}
                 isPopping={popIds.has(note.id)}
+                isAnimating={animatingIds.has(note.id)}
                 openProgress={0}
                 closingScrollOffset={0}
                 hoverSuppressed={marquee !== null}
@@ -356,6 +490,7 @@ export default function Canvas() {
             const canvasX = -t.offsetX / t.scale;
             const canvasY = -t.offsetY / t.scale;
             const note = await addNote(canvasX, canvasY);
+            undoStack.record({ type: "create", noteIds: [note.id] });
             setPopIds(new Set([note.id]));
             setTimeout(() => setPopIds(new Set()), 400);
           }}

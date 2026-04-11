@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { Note } from "../store/db";
 import { DELETE_DURATION } from "../constants";
+import { snapshotFromNote, type CanvasAction } from "../store/undoStack";
 
 interface UseKeyboardShortcutsOptions {
   notes: Note[];
@@ -13,6 +14,9 @@ interface UseKeyboardShortcutsOptions {
   selectAll: () => void;
   deleteNote: (id: string) => void;
   openNote: (id: string) => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  recordAction: (action: CanvasAction) => void;
 }
 
 export function useKeyboardShortcuts({
@@ -26,9 +30,19 @@ export function useKeyboardShortcuts({
   selectAll,
   deleteNote,
   openNote,
+  onUndo,
+  onRedo,
+  recordAction,
 }: UseKeyboardShortcutsOptions) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Undo/Redo — only when no card is open (text editing has its own undo)
+      if (e.key === "z" && (e.metaKey || e.ctrlKey) && !canvasLocked) {
+        e.preventDefault();
+        if (e.shiftKey) onRedo();
+        else onUndo();
+        return;
+      }
       if (canvasLocked) {
         if (e.key === "Escape") closeNote();
         return;
@@ -40,6 +54,11 @@ export function useKeyboardShortcuts({
       if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.size > 0) {
         e.preventDefault();
         const toDelete = new Set(selectedIds);
+        // Record snapshots for undo before deleting
+        const snapshots = notes
+          .filter(n => toDelete.has(n.id))
+          .map(snapshotFromNote);
+        recordAction({ type: "delete", snapshots });
         setDeletingIds(toDelete);
         setSelectedIds(new Set());
         setTimeout(() => {
@@ -107,5 +126,5 @@ export function useKeyboardShortcuts({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote]);
+  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote, onUndo, onRedo, recordAction]);
 }
