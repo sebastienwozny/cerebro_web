@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import { MIN_SCALE, MAX_SCALE } from "../constants";
 
 export interface CanvasTransform {
   offsetX: number;
@@ -7,8 +8,6 @@ export interface CanvasTransform {
 }
 
 const STORAGE_KEY = "cerebro.canvas";
-const MIN_SCALE = 0.1;
-const MAX_SCALE = 3;
 
 function loadSaved(): CanvasTransform {
   try {
@@ -19,9 +18,7 @@ function loadSaved(): CanvasTransform {
 }
 
 export function useCanvas() {
-  // Mutable ref — updated on every pan/zoom without triggering React re-renders
   const transformRef = useRef<CanvasTransform>(loadSaved());
-  // DOM ref for the canvas layer div — we write transforms directly to it
   const layerRef = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -32,7 +29,6 @@ export function useCanvas() {
     }, 300);
   }, []);
 
-  // Apply transform directly to DOM — no React re-render
   const applyTransform = useCallback(() => {
     const el = layerRef.current;
     if (!el) return;
@@ -68,7 +64,6 @@ export function useCanvas() {
     [applyTransform, scheduleSave]
   );
 
-  // Read current transform (for open animation, double-click positioning, etc.)
   const getTransform = useCallback(() => transformRef.current, []);
 
   return { transformRef, layerRef, pan, zoom, getTransform, applyTransform };

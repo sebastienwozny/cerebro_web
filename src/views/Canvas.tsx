@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import gsap from "gsap";
 import { useNotes } from "../store/useNotes";
 import { useCanvas } from "../store/useCanvas";
+import { useOpenClose } from "../hooks/useOpenClose";
+import { useSpacePan } from "../hooks/useSpacePan";
+import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
-
-const OPEN_DURATION = 0.5;
-const CLOSE_DURATION = 0.45;
 
 export default function Canvas() {
   const { notes, addNote, updateNote, bringToFront } = useNotes();
@@ -14,17 +13,14 @@ export default function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
-  const [openNoteId, setOpenNoteId] = useState<string | null>(null);
-  const [openProgress, setOpenProgress] = useState(0);
-  const [closingScrollOffset, setClosingScrollOffset] = useState(0);
-  // Snapshot of transform at the moment a card starts opening (for screen-space animation)
-  const [openTransform, setOpenTransform] = useState({ offsetX: 0, offsetY: 0, scale: 0.5 });
-  const progressRef = useRef({ value: 0 });
-  const tweenRef = useRef<gsap.core.Tween | null>(null);
+  const { openNoteId, openProgress, closingScrollOffset, openTransform, openNote, closeNote } =
+    useOpenClose(bringToFront, getTransform);
 
   const canvasLocked = openNoteId !== null;
-  const [spaceHeld, setSpaceHeld] = useState(false);
-  const spacePanRef = useRef<{ startX: number; startY: number; offsetX: number; offsetY: number } | null>(null);
+  const { spaceHeld, handlePointerDown: spacePanDown, handlePointerMove: spacePanMove, handlePointerUp: spacePanUp } =
+    useSpacePan(canvasLocked, pan, getTransform);
+
+  useWheelNavigation(containerRef, canvasLocked, windowSize.w, windowSize.h, pan, zoom);
 
   useEffect(() => {
     const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
@@ -32,46 +28,18 @@ export default function Canvas() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Apply initial transform to DOM
   useEffect(() => { applyTransform(); }, [applyTransform]);
 
-  // ── Space + drag to pan ──
+  // Escape to close
   useEffect(() => {
-    if (canvasLocked) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !e.repeat && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) {
-        e.preventDefault();
-        setSpaceHeld(true);
-      }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && openNoteId) closeNote();
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space") setSpaceHeld(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [canvasLocked]);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openNoteId, closeNote]);
 
-  // ── Wheel: pan + pinch-zoom (no React re-render) ──
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || canvasLocked) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      if (e.ctrlKey || e.metaKey) {
-        zoom(e.deltaY, e.clientX, e.clientY, windowSize.w, windowSize.h);
-      } else {
-        pan(-e.deltaX * 1.3, -e.deltaY * 1.3);
-      }
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [pan, zoom, canvasLocked, windowSize.w, windowSize.h]);
-
-  // ── Double-click to create ──
+  // Double-click to create
   const handleDoubleClick = useCallback(
     (e: React.MouseEvent) => {
       if (canvasLocked) return;
@@ -84,45 +52,6 @@ export default function Canvas() {
     [addNote, canvasLocked, getTransform, windowSize]
   );
 
-  // ── Open / close with GSAP ──
-  const openNote = useCallback(
-    (id: string) => {
-      bringToFront(id);
-      setOpenTransform({ ...getTransform() });
-      setOpenNoteId(id);
-      tweenRef.current?.kill();
-      tweenRef.current = gsap.to(progressRef.current, {
-        value: 1,
-        duration: OPEN_DURATION,
-        ease: "power3.out",
-        onUpdate: () => setOpenProgress(progressRef.current.value),
-      });
-    },
-    [bringToFront, getTransform]
-  );
-
-  const closeNote = useCallback(() => {
-    const scrollEl = document.querySelector("[data-editor-overlay]") as HTMLElement | null;
-    setClosingScrollOffset(scrollEl?.scrollTop ?? 0);
-    tweenRef.current?.kill();
-    tweenRef.current = gsap.to(progressRef.current, {
-      value: 0,
-      duration: CLOSE_DURATION,
-      ease: "power3.out",
-      onUpdate: () => setOpenProgress(progressRef.current.value),
-      onComplete: () => { setOpenNoteId(null); setClosingScrollOffset(0); },
-    });
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && openNoteId) closeNote();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [openNoteId, closeNote]);
-
-  // ── Drag ──
   const handleDragMove = useCallback(
     (noteId: string, newX: number, newY: number) => {
       updateNote(noteId, { positionX: newX, positionY: newY });
@@ -132,51 +61,21 @@ export default function Canvas() {
 
   const handleDragEnd = useCallback((_noteId: string) => {}, []);
 
-  const handleSpacePanDown = useCallback(
-    (e: React.PointerEvent) => {
-      if (!spaceHeld || canvasLocked) return;
-      e.preventDefault();
-      const t = getTransform();
-      spacePanRef.current = { startX: e.clientX, startY: e.clientY, offsetX: t.offsetX, offsetY: t.offsetY };
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    },
-    [spaceHeld, canvasLocked, getTransform]
-  );
-
-  const handleSpacePanMove = useCallback(
-    (e: React.PointerEvent) => {
-      if (!spacePanRef.current) return;
-      const t = getTransform();
-      const dx = e.clientX - spacePanRef.current.startX;
-      const dy = e.clientY - spacePanRef.current.startY;
-      pan(dx - (t.offsetX - spacePanRef.current.offsetX), dy - (t.offsetY - spacePanRef.current.offsetY));
-    },
-    [pan, getTransform]
-  );
-
-  const handleSpacePanUp = useCallback(() => {
-    spacePanRef.current = null;
-  }, []);
-
   return (
     <div
       ref={containerRef}
       className="w-full h-full relative overflow-hidden"
-      style={{ background: "var(--color-canvas)", cursor: spaceHeld ? (spacePanRef.current ? "grabbing" : "grab") : "default" }}
+      style={{ background: "var(--color-canvas)", cursor: spaceHeld ? "grab" : "default" }}
       onDoubleClick={handleDoubleClick}
-      onPointerDown={handleSpacePanDown}
-      onPointerMove={handleSpacePanMove}
-      onPointerUp={handleSpacePanUp}
+      onPointerDown={spacePanDown}
+      onPointerMove={spacePanMove}
+      onPointerUp={spacePanUp}
     >
       {/* White overlay — covers all cards during open/close */}
       {openProgress > 0 && (
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "#ffffff",
-            opacity: openProgress,
-            zIndex: 9998,
-          }}
+          style={{ background: "#ffffff", opacity: openProgress, zIndex: 9998 }}
         />
       )}
 
@@ -212,17 +111,17 @@ export default function Canvas() {
                 onDragEnd={handleDragEnd}
                 onBringToFront={bringToFront}
               >
-              <NoteEditor
-                blocks={note.blocks}
-                onUpdate={(blocks) => {
-                  const title = blocks[0]?.content ?? "";
-                  updateNote(note.id, { blocks, title });
-                }}
-                editable={false}
-                headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
-              />
-            </NoteCard>
-          </div>
+                <NoteEditor
+                  blocks={note.blocks}
+                  onUpdate={(blocks) => {
+                    const title = blocks[0]?.content ?? "";
+                    updateNote(note.id, { blocks, title });
+                  }}
+                  editable={false}
+                  headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
+                />
+              </NoteCard>
+            </div>
           );
         })}
       </div>
