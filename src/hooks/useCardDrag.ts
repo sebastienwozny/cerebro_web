@@ -15,6 +15,7 @@ interface UseCardDragOptions {
   onDragMove: (noteId: string, x: number, y: number) => void;
   onDragEnd: (noteId: string) => void;
   onDragRotation?: (rotation: number) => void;
+  onDragDuplicate?: (noteId: string) => void;
   onBringToFront: (noteId: string) => void;
 }
 
@@ -23,6 +24,7 @@ export function useCardDrag(opts: UseCardDragOptions) {
   const dragStart = useRef<{ px: number; py: number; noteX: number; noteY: number } | null>(null);
   const lastMoveRef = useRef<{ x: number; time: number }>({ x: 0, time: 0 });
   const isDraggingRef = useRef(false);
+  const didDuplicateRef = useRef(false);
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -55,6 +57,7 @@ export function useCardDrag(opts: UseCardDragOptions) {
       if (e.button !== 0) return;
 
       dragStart.current = { px: e.clientX, py: e.clientY, noteX: positionX, noteY: positionY };
+      didDuplicateRef.current = false;
       onBringToFront(noteId);
 
       // Attach listeners synchronously to avoid missing fast pointerup
@@ -66,6 +69,11 @@ export function useCardDrag(opts: UseCardDragOptions) {
         if (!isDraggingRef.current && Math.abs(dx) + Math.abs(dy) > 8 / scale) {
           isDraggingRef.current = true;
           setIsDragging(true);
+          // Option+drag → duplicate before starting the drag
+          if (me.altKey && !didDuplicateRef.current) {
+            didDuplicateRef.current = true;
+            optsRef.current.onDragDuplicate?.(nid);
+          }
           onDragStart(nid);
           lastMoveRef.current = { x: me.clientX, time: performance.now() };
           smoothPos.current = { x: dragStart.current.noteX, y: dragStart.current.noteY };

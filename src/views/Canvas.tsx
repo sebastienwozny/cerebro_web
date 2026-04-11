@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotes } from "../store/useNotes";
+import { db, type Note } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
 import { useOpenClose } from "../hooks/useOpenClose";
 import { useSpacePan } from "../hooks/useSpacePan";
@@ -10,7 +11,7 @@ import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 
 export default function Canvas() {
-  const { notes, addNote, updateNote, deleteNote, bringToFront } = useNotes();
+  const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
   const { transformRef, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
   const containerRef = useRef<HTMLDivElement>(null);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -143,6 +144,41 @@ export default function Canvas() {
     [updateNote]
   );
 
+  const handleDragDuplicate = useCallback(
+    async (noteId: string) => {
+      const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
+      if (selectedIds.has(noteId) && selectedIds.size > 1) {
+        const selected = notes.filter(n => selectedIds.has(n.id));
+        let z = maxZ + 1;
+        const dupeOps: { note: Note; z: number }[] = [];
+        const origOps: { id: string; z: number }[] = [];
+        for (const note of selected) {
+          dupeOps.push({ note, z: z++ });
+        }
+        for (const note of selected) {
+          origOps.push({ id: note.id, z: z++ });
+        }
+        await db.transaction("rw", db.notes, async () => {
+          for (const op of dupeOps) {
+            await duplicateNote(op.note, op.z);
+          }
+          for (const op of origOps) {
+            await updateNote(op.id, { zOrder: op.z });
+          }
+        });
+      } else {
+        const note = notes.find(n => n.id === noteId);
+        if (note) {
+          await db.transaction("rw", db.notes, async () => {
+            await duplicateNote(note, maxZ + 1);
+            await updateNote(noteId, { zOrder: maxZ + 2 });
+          });
+        }
+      }
+    },
+    [notes, selectedIds, duplicateNote, updateNote]
+  );
+
   const handleDragRotation = useCallback((rotation: number) => {
     if (groupDragStartRef.current.size > 0) {
       setGroupDragRotation(rotation);
@@ -176,7 +212,7 @@ export default function Canvas() {
       {openProgress > 0 && (
         <div
           className="absolute inset-0 pointer-events-none"
-          style={{ background: "#ffffff", opacity: openProgress, zIndex: 9998 }}
+          style={{ background: "var(--color-card-open)", opacity: openProgress, zIndex: 9998 }}
         />
       )}
 
@@ -201,7 +237,10 @@ export default function Canvas() {
             ? { ...note, positionX: startPos.x, positionY: startPos.y }
             : note;
           return (
-            <div key={note.id} data-notecard>
+            <div
+              key={note.id}
+              data-notecard
+            >
               <NoteCard
                 note={noteForCard}
                 scale={transformRef.current.scale}
@@ -224,6 +263,7 @@ export default function Canvas() {
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
                 onDragRotation={handleDragRotation}
+                onDragDuplicate={handleDragDuplicate}
                 onBringToFront={bringToFront}
               >
                 <NoteEditor

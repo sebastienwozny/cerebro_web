@@ -26,6 +26,7 @@ interface Props {
   onDragMove: (noteId: string, dx: number, dy: number) => void;
   onDragEnd: (noteId: string) => void;
   onDragRotation?: (rotation: number) => void;
+  onDragDuplicate?: (noteId: string) => void;
   onBringToFront: (noteId: string) => void;
   children?: React.ReactNode;
 }
@@ -37,7 +38,7 @@ function lerp(a: number, b: number, t: number) {
 export default function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
-  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onBringToFront,
+  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
@@ -56,6 +57,7 @@ export default function NoteCard({
     onDragMove,
     onDragEnd,
     onDragRotation,
+    onDragDuplicate,
     onBringToFront,
   });
 
@@ -117,19 +119,19 @@ export default function NoteCard({
           transform: isDeleting
             ? "translate3d(0,0,0) scale(0) rotate(12deg)"
             : isDragging || isFollowing
-              ? `translate3d(0,0,0) rotate(${rotation}deg)`
-              : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
-                ? "translate3d(0,0,0) scale(1.02)"
-                : "translate3d(0,0,0)",
+                ? `translate3d(0,0,0) rotate(${rotation}deg)`
+                : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
+                  ? "translate3d(0,0,0) scale(1.02)"
+                  : "translate3d(0,0,0)",
           opacity: isDeleting ? 0 : 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           transition: isDeleting
             ? "transform 0.45s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) 0.15s"
-            : isDragging || isFollowing ? "none" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+            : isDragging || isFollowing ? "opacity 0.3s ease-out" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
           boxShadow: t > 0
             ? "none"
             : isSelected && openProgress < 0.1
-              ? "0 0 0 8px #ffffff, 0 4px 10px rgba(0,0,0,0.05)"
+              ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
               : isHovered
                 ? "0 20px 40px rgba(0,0,0,0.05)"
                 : "0 4px 10px rgba(0,0,0,0.05)",
@@ -153,7 +155,7 @@ export default function NoteCard({
               className="absolute inset-0"
               style={{
                 borderRadius: CARD_RADIUS * (1 - t),
-                background: `color-mix(in srgb, var(--color-card) ${Math.round((1 - t) * 100)}%, #ffffff)`,
+                background: `color-mix(in srgb, var(--color-card) ${Math.round((1 - t) * 100)}%, var(--color-card-open))`,
               }}
             />
           )}
@@ -163,7 +165,7 @@ export default function NoteCard({
             className="absolute inset-0 pointer-events-none"
             style={{
               borderRadius: CARD_RADIUS,
-              border: "4px solid rgba(0, 0, 0, 0.12)",
+              border: "4px solid var(--color-selection-border)",
               opacity: isSelected && openProgress < 0.1 ? 1 : 0,
               transition: "opacity 0.15s ease-out",
               zIndex: 1,

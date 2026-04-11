@@ -38,10 +38,22 @@ export function useNotes() {
     await db.notes.delete(id);
   }
 
+  async function duplicateNote(source: Note, zOrder?: number): Promise<Note> {
+    const copy: Note = {
+      ...source,
+      id: uuid(),
+      blocks: source.blocks.map(b => ({ ...b, id: uuid() })),
+      zOrder: zOrder ?? source.zOrder,
+      createdAt: new Date(),
+    };
+    await db.notes.add(copy);
+    return copy;
+  }
+
   async function bringToFront(id: string) {
     const maxZ = getMaxZ(notes);
     await db.notes.update(id, { zOrder: maxZ + 1 });
   }
 
-  return { notes, addNote, updateNote, deleteNote, bringToFront };
+  return { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront };
 }
