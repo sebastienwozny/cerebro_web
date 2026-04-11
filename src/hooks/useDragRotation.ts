@@ -2,10 +2,12 @@ import { useCallback, useRef, useState } from "react";
 
 const MAX_ROTATION = 2;
 
-export function useDragRotation() {
+export function useDragRotation(onRotationChange?: (rotation: number) => void) {
   const [dragRotation, setDragRotation] = useState(0);
   const springRef = useRef({ current: 0, velocity: 0, target: 0, stiffness: 1750, damping: 50 });
   const springRafRef = useRef<number>(0);
+  const onChangeRef = useRef(onRotationChange);
+  onChangeRef.current = onRotationChange;
 
   const startSpring = useCallback(() => {
     if (springRafRef.current) return;
@@ -16,11 +18,13 @@ export function useDragRotation() {
       s.velocity += force * dt;
       s.current += s.velocity * dt;
       setDragRotation(s.current);
+      onChangeRef.current?.(s.current);
       if (Math.abs(s.current - s.target) > 0.001 || Math.abs(s.velocity) > 0.01) {
         springRafRef.current = requestAnimationFrame(tick);
       } else {
         s.current = s.target;
         setDragRotation(s.target);
+        onChangeRef.current?.(s.target);
         springRafRef.current = 0;
       }
     };

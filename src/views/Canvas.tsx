@@ -4,11 +4,12 @@ import { useCanvas } from "../store/useCanvas";
 import { useOpenClose } from "../hooks/useOpenClose";
 import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
+import { useSelection } from "../hooks/useSelection";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 
 export default function Canvas() {
-  const { notes, addNote, updateNote, bringToFront } = useNotes();
+  const { notes, addNote, updateNote, deleteNote, bringToFront } = useNotes();
   const { transformRef, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
   const containerRef = useRef<HTMLDivElement>(null);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
@@ -22,6 +23,22 @@ export default function Canvas() {
 
   useWheelNavigation(containerRef, canvasLocked, windowSize.w, windowSize.h, pan, zoom);
 
+  const {
+    selectedIds, setSelectedIds, marquee,
+    selectNote, clearSelection, selectAll, handleMarqueeDown,
+  } = useSelection(notes, canvasLocked, getTransform, windowSize.w, windowSize.h);
+
+  // Delete animation state
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+
+  // Group drag state
+  const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
+  const [groupDragRotation, setGroupDragRotation] = useState(0);
+  const groupDragDeltaRef = useRef({ dx: 0, dy: 0 });
+  // Stores start positions for ALL cards in the group (leader + followers)
+  const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
+  const leadStartRef = useRef<{ x: number; y: number } | null>(null);
+
   useEffect(() => {
     const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener("resize", onResize);
@@ -30,14 +47,92 @@ export default function Canvas() {
 
   useEffect(() => { applyTransform(); }, [applyTransform]);
 
-  // Escape to close
+  // Keyboard shortcuts
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && openNoteId) closeNote();
+      if (canvasLocked) {
+        if (e.key === "Escape") closeNote();
+        return;
+      }
+      if (e.key === "Escape") {
+        clearSelection();
+        return;
+      }
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedIds.size > 0) {
+        e.preventDefault();
+        const toDelete = new Set(selectedIds);
+        setDeletingIds(toDelete);
+        setSelectedIds(new Set());
+        setTimeout(() => {
+          for (const id of toDelete) deleteNote(id);
+          setDeletingIds(new Set());
+        }, 450);
+        return;
+      }
+      if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        selectAll();
+        return;
+      }
+      if (e.key === "Tab" && notes.length > 0) {
+        e.preventDefault();
+        const sorted = [...notes].sort((a, b) => a.positionX - b.positionX || a.positionY - b.positionY);
+        const ids = sorted.map(n => n.id);
+        // Find current index based on last selected card
+        const lastSelected = ids.find(id => selectedIds.has(id));
+        const currentIdx = lastSelected ? ids.indexOf(lastSelected) : -1;
+        const nextIdx = e.shiftKey
+          ? (currentIdx <= 0 ? ids.length - 1 : currentIdx - 1)
+          : (currentIdx + 1) % ids.length;
+        setSelectedIds(new Set([ids[nextIdx]]));
+        return;
+      }
+      if ((e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "ArrowUp" || e.key === "ArrowDown") && selectedIds.size > 0) {
+        e.preventDefault();
+        const selected = notes.filter(n => selectedIds.has(n.id));
+        const anchor = selected[0];
+        if (!anchor) return;
+        const others = notes.filter(n => !selectedIds.has(n.id));
+        if (others.length === 0) return;
+        const horizontal = e.key === "ArrowRight" || e.key === "ArrowLeft";
+        let best: typeof notes[0] | null = null;
+        let bestScore = Infinity;
+        for (const n of others) {
+          const dx = n.positionX - anchor.positionX;
+          const dy = n.positionY - anchor.positionY;
+          // Check direction
+          let valid = false;
+          if (e.key === "ArrowRight" && dx > 0) valid = true;
+          if (e.key === "ArrowLeft" && dx < 0) valid = true;
+          if (e.key === "ArrowDown" && dy > 0) valid = true;
+          if (e.key === "ArrowUp" && dy < 0) valid = true;
+          if (!valid) continue;
+          // Weight: penalize the perpendicular axis so cards aligned with
+          // the direction are strongly preferred
+          const score = horizontal
+            ? Math.abs(dx) + Math.abs(dy) * 3
+            : Math.abs(dy) + Math.abs(dx) * 3;
+          if (score < bestScore) { bestScore = score; best = n; }
+        }
+        if (best) {
+          if (e.shiftKey) {
+            setSelectedIds(prev => { const next = new Set(prev); next.add(best!.id); return next; });
+          } else {
+            setSelectedIds(new Set([best.id]));
+          }
+        }
+        return;
+      }
+      if (e.key === "Enter" && selectedIds.size === 1) {
+        const noteId = [...selectedIds][0];
+        clearSelection();
+        openNote(noteId);
+        return;
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [openNoteId, closeNote]);
+  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, selectAll, notes, openNote]);
 
   // Double-click to create
   const handleDoubleClick = useCallback(
@@ -52,26 +147,113 @@ export default function Canvas() {
     [addNote, canvasLocked, getTransform, windowSize]
   );
 
+  const handleCardTap = useCallback(
+    (noteId: string) => { clearSelection(); openNote(noteId); },
+    [openNote, clearSelection]
+  );
+
+  const handleCardShiftTap = useCallback(
+    (noteId: string) => { selectNote(noteId); },
+    [selectNote]
+  );
+
+  const handleDragStart = useCallback(
+    (noteId: string) => {
+      const leadNote = notes.find(n => n.id === noteId);
+      if (!leadNote) return;
+      leadStartRef.current = { x: leadNote.positionX, y: leadNote.positionY };
+
+      if (selectedIds.has(noteId) && selectedIds.size > 1) {
+        // Group drag — store ALL selected cards (leader included)
+        const starts = new Map<string, { x: number; y: number }>();
+        for (const note of notes) {
+          if (selectedIds.has(note.id)) {
+            starts.set(note.id, { x: note.positionX, y: note.positionY });
+          }
+        }
+        groupDragStartRef.current = starts;
+      } else {
+        groupDragStartRef.current = new Map();
+      }
+      groupDragDeltaRef.current = { dx: 0, dy: 0 };
+      setGroupDragDelta({ dx: 0, dy: 0 });
+    },
+    [selectedIds, notes]
+  );
+
   const handleDragMove = useCallback(
     (noteId: string, newX: number, newY: number) => {
-      updateNote(noteId, { positionX: newX, positionY: newY });
+      if (groupDragStartRef.current.size > 0 && leadStartRef.current) {
+        // Group drag — no DB updates, all movement is visual via delta
+        const dx = newX - leadStartRef.current.x;
+        const dy = newY - leadStartRef.current.y;
+        groupDragDeltaRef.current = { dx, dy };
+        setGroupDragDelta({ dx, dy });
+      } else {
+        // Solo drag — update DB directly
+        updateNote(noteId, { positionX: newX, positionY: newY });
+      }
     },
     [updateNote]
   );
 
-  const handleDragEnd = useCallback((_noteId: string) => {}, []);
+  const handleDragEnd = useCallback(
+    async (_noteId: string) => {
+      const starts = groupDragStartRef.current;
+      // Stop rotation immediately
+      setGroupDragRotation(0);
+      if (starts.size > 0) {
+        // Commit final positions to DB
+        const delta = groupDragDeltaRef.current;
+        const promises: Promise<void>[] = [];
+        for (const [id, start] of starts) {
+          promises.push(updateNote(id, { positionX: start.x + delta.dx, positionY: start.y + delta.dy }));
+        }
+        // Wait for DB writes to complete
+        await Promise.all(promises);
+        // Wait for Dexie → useLiveQuery → React to propagate new positions
+        // The ref stays populated so cards remain pinned at startPos + delta
+        await new Promise(r => setTimeout(r, 50));
+      }
+      // NOW safe: DB positions are propagated, clearing ref won't cause a snap
+      groupDragStartRef.current = new Map();
+      leadStartRef.current = null;
+      groupDragDeltaRef.current = { dx: 0, dy: 0 };
+      setGroupDragDelta({ dx: 0, dy: 0 });
+    },
+    [updateNote]
+  );
+
+  const handleDragRotation = useCallback((rotation: number) => {
+    if (groupDragStartRef.current.size > 0) {
+      setGroupDragRotation(rotation);
+    }
+  }, []);
+
+  const handleCanvasPointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      spacePanDown(e);
+      if (!spaceHeld) {
+        handleMarqueeDown(e);
+      }
+    },
+    [spacePanDown, spaceHeld, handleMarqueeDown]
+  );
 
   return (
     <div
       ref={containerRef}
       className="w-full h-full relative overflow-hidden"
-      style={{ background: "var(--color-canvas)", cursor: spaceHeld ? "grab" : "default" }}
+      style={{
+        background: "var(--color-canvas)",
+        cursor: spaceHeld ? "grab" : marquee ? "crosshair" : "default",
+      }}
       onDoubleClick={handleDoubleClick}
-      onPointerDown={spacePanDown}
+      onPointerDown={handleCanvasPointerDown}
       onPointerMove={spacePanMove}
       onPointerUp={spacePanUp}
     >
-      {/* White overlay — covers all cards during open/close */}
+      {/* White overlay */}
       {openProgress > 0 && (
         <div
           className="absolute inset-0 pointer-events-none"
@@ -79,7 +261,7 @@ export default function Canvas() {
         />
       )}
 
-      {/* Canvas layer — DOM-driven transform, no React re-renders on pan/zoom */}
+      {/* Canvas layer */}
       <div
         ref={layerRef}
         style={{
@@ -91,24 +273,38 @@ export default function Canvas() {
         }}
       >
         {notes.map((note) => {
-          const isThisOpen = note.id === openNoteId;
-          if (isThisOpen && openProgress > 0) return null;
+          if (note.id === openNoteId && openProgress > 0) return null;
+          // Card is in the group drag if it's in groupDragStartRef (leader + followers)
+          const inGroupDrag = groupDragStartRef.current.has(note.id);
+          // Pin to start position during group drag to avoid double-delta when Dexie propagates
+          const startPos = inGroupDrag ? groupDragStartRef.current.get(note.id)! : null;
+          const noteForCard = startPos
+            ? { ...note, positionX: startPos.x, positionY: startPos.y }
+            : note;
           return (
             <div key={note.id} data-notecard>
               <NoteCard
-                note={note}
+                note={noteForCard}
                 scale={transformRef.current.scale}
                 offsetX={transformRef.current.offsetX}
                 offsetY={transformRef.current.offsetY}
                 windowW={windowSize.w}
                 windowH={windowSize.h}
                 isOpen={false}
+                isSelected={selectedIds.has(note.id)}
+                isDeleting={deletingIds.has(note.id)}
                 openProgress={0}
                 closingScrollOffset={0}
-                onTap={() => openNote(note.id)}
+                hoverSuppressed={marquee !== null}
+                groupDragDelta={inGroupDrag ? groupDragDelta : { dx: 0, dy: 0 }}
+                groupDragRotation={inGroupDrag ? groupDragRotation : 0}
+                onTap={() => handleCardTap(note.id)}
+                onShiftTap={() => handleCardShiftTap(note.id)}
                 onClose={closeNote}
+                onDragStart={handleDragStart}
                 onDragMove={handleDragMove}
                 onDragEnd={handleDragEnd}
+                onDragRotation={handleDragRotation}
                 onBringToFront={bringToFront}
               >
                 <NoteEditor
@@ -126,7 +322,7 @@ export default function Canvas() {
         })}
       </div>
 
-      {/* Opening/open card — rendered outside canvas layer (screen-space) */}
+      {/* Opening/open card */}
       {openNoteId && openProgress > 0 && notes.filter(n => n.id === openNoteId).map((note) => (
         <div key={note.id} data-notecard>
           <NoteCard
@@ -137,10 +333,17 @@ export default function Canvas() {
             windowW={windowSize.w}
             windowH={windowSize.h}
             isOpen={openProgress > 0.5}
+            isSelected={false}
+            isDeleting={false}
             openProgress={openProgress}
             closingScrollOffset={closingScrollOffset}
+            hoverSuppressed={false}
+            groupDragDelta={{ dx: 0, dy: 0 }}
+            groupDragRotation={0}
             onTap={() => {}}
+            onShiftTap={() => {}}
             onClose={closeNote}
+            onDragStart={() => {}}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
             onBringToFront={bringToFront}
@@ -157,6 +360,23 @@ export default function Canvas() {
           </NoteCard>
         </div>
       ))}
+
+      {/* Marquee selection rectangle */}
+      {marquee && (
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            left: marquee.x,
+            top: marquee.y,
+            width: marquee.w,
+            height: marquee.h,
+            background: "rgba(74, 158, 255, 0.08)",
+            border: "1px solid rgba(74, 158, 255, 0.3)",
+            borderRadius: 4,
+            zIndex: 9990,
+          }}
+        />
+      )}
 
       {/* Empty state */}
       {notes.length === 0 && (

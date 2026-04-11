@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
 import { CARD_W, CARD_H, CARD_CONTENT_W, CARD_RADIUS } from "../constants";
@@ -11,12 +11,20 @@ interface Props {
   windowW: number;
   windowH: number;
   isOpen: boolean;
+  isSelected: boolean;
+  isDeleting: boolean;
   openProgress: number;
   closingScrollOffset: number;
+  hoverSuppressed: boolean;
+  groupDragDelta: { dx: number; dy: number };
+  groupDragRotation: number;
   onTap: () => void;
+  onShiftTap: () => void;
   onClose: () => void;
+  onDragStart: (noteId: string) => void;
   onDragMove: (noteId: string, dx: number, dy: number) => void;
   onDragEnd: (noteId: string) => void;
+  onDragRotation?: (rotation: number) => void;
   onBringToFront: (noteId: string) => void;
   children?: React.ReactNode;
 }
@@ -27,8 +35,8 @@ function lerp(a: number, b: number, t: number) {
 
 export default function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, openProgress, closingScrollOffset,
-  onTap, onClose, onDragMove, onDragEnd, onBringToFront,
+  isOpen, isSelected, isDeleting, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
+  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onBringToFront,
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
@@ -42,10 +50,29 @@ export default function NoteCard({
     isOpen,
     openProgress,
     onTap,
+    onShiftTap,
+    onDragStart,
     onDragMove,
     onDragEnd,
+    onDragRotation,
     onBringToFront,
   });
+
+  // Clear hover when drag starts so it doesn't trigger on release
+  useEffect(() => {
+    if (isDragging) setIsHovered(false);
+  }, [isDragging]);
+
+  // Suppress scale after drag — re-enable when selection changes
+  const wasDraggedRef = useRef(false);
+  useEffect(() => {
+    if (isDragging || groupDragDelta.dx !== 0 || groupDragDelta.dy !== 0) {
+      wasDraggedRef.current = true;
+    }
+  }, [isDragging, groupDragDelta]);
+  useEffect(() => {
+    if (!isSelected) wasDraggedRef.current = false;
+  }, [isSelected]);
 
   const isImageCard = note.kind === "image";
   const cardW = isImageCard ? CARD_CONTENT_W : CARD_W;
@@ -53,10 +80,8 @@ export default function NoteCard({
 
   const t = openProgress;
 
-  // Cards at t=0 are positioned in canvas-space (parent div handles offset+scale).
-  // Cards at t>0 lerp to screen-space position.
-  const canvasLeft = note.positionX - cardW / 2;
-  const canvasTop = note.positionY - cardH / 2;
+  const canvasLeft = note.positionX - cardW / 2 + groupDragDelta.dx;
+  const canvasTop = note.positionY - cardH / 2 + groupDragDelta.dy;
 
   const screenLeft = (windowW - cardW) / 2;
   const screenTop = 0;
@@ -72,6 +97,10 @@ export default function NoteCard({
     ? -closingScrollOffset * openProgress
     : 0;
 
+  // A follower is a card being moved by group drag (not the one being actively dragged)
+  const isFollowing = !isDragging && (groupDragDelta.dx !== 0 || groupDragDelta.dy !== 0 || groupDragRotation !== 0);
+  const rotation = isDragging ? dragRotation : groupDragRotation;
+
   return (
     <>
       <div
@@ -85,26 +114,31 @@ export default function NoteCard({
           overflow: "hidden",
           cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
           zIndex: openProgress > 0 ? 9999 : note.zOrder,
-          transform: isDragging
-            ? `translate3d(0,0,0) rotate(${dragRotation}deg)`
-            : isHovered && t < 0.1
-              ? "translate3d(0,0,0) scale(1.02)"
-              : "translate3d(0,0,0)",
-          transformOrigin: isDragging ? "top center" : "center",
-          transition: isDragging ? "none" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+          transform: isDeleting
+            ? "translate3d(0,0,0) scale(0) rotate(12deg)"
+            : isDragging || isFollowing
+              ? `translate3d(0,0,0) rotate(${rotation}deg)`
+              : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
+                ? "translate3d(0,0,0) scale(1.02)"
+                : "translate3d(0,0,0)",
+          opacity: isDeleting ? 0 : 1,
+          transformOrigin: isDragging || isFollowing ? "top center" : "center",
+          transition: isDeleting
+            ? "transform 0.45s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) 0.15s"
+            : isDragging || isFollowing ? "none" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
           boxShadow: t > 0
             ? "none"
-            : isDragging
-              ? "0 20px 40px rgba(0,0,0,0.08)"
+            : isSelected && openProgress < 0.1
+              ? "0 0 0 6px #ffffff, 0 4px 10px rgba(0,0,0,0.05)"
               : isHovered
                 ? "0 20px 40px rgba(0,0,0,0.05)"
                 : "0 4px 10px rgba(0,0,0,0.05)",
         }}
         onPointerDown={handlePointerDown}
-        onMouseEnter={() => !isOpen && t < 0.1 && setIsHovered(true)}
+        onMouseEnter={() => !isOpen && !hoverSuppressed && t < 0.1 && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Inner wrapper — scales content from cardW×cardH to fit the visual box */}
+        {/* Inner wrapper */}
         <div
           style={{
             width: cardW,
@@ -123,6 +157,18 @@ export default function NoteCard({
               }}
             />
           )}
+
+          {/* Selection border — white inside */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              borderRadius: CARD_RADIUS,
+              border: "4px solid rgba(0, 0, 0, 0.12)",
+              opacity: isSelected && openProgress < 0.1 ? 1 : 0,
+              transition: "opacity 0.15s ease-out",
+              zIndex: 1,
+            }}
+          />
 
           {/* Image card thumbnail */}
           {isImageCard && note.imageDataUrl && openProgress < 0.01 && (
@@ -166,7 +212,7 @@ export default function NoteCard({
         </div>
       </div>
 
-      {/* Back button — slides in from left */}
+      {/* Back button */}
       {openProgress > 0 && (
         <button
           className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm"
@@ -187,7 +233,7 @@ export default function NoteCard({
         </button>
       )}
 
-      {/* Editor content (open mode — full screen scroll, scrollbar at browser edge) */}
+      {/* Editor content (open mode) */}
       {editing && (
         <div
           ref={scrollRef}
