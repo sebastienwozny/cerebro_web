@@ -89,9 +89,8 @@ html, body, #root {
   border-color: #1a1a1a;
 }
 
-/* Placeholder */
-.tiptap p.is-editor-empty:first-child::before,
-.tiptap h1.is-empty::before {
+/* Placeholder — shown on every empty node with the current cursor */
+.tiptap .is-empty::before {
   content: attr(data-placeholder);
   @apply float-left pointer-events-none h-0;
   color: var(--color-text-muted);

@@ -292,9 +292,11 @@ export default function NoteCard({
           zIndex: 10000,
           paddingTop: 150,
           paddingBottom: 40,
+          paddingLeft: 20,
+          paddingRight: 20,
         }}
       >
-        <div style={{ width: CARD_CONTENT_W }}>
+        <div style={{ width: "100%", maxWidth: CARD_CONTENT_W }}>
           {children}
         </div>
       </div>

@@ -219,6 +219,8 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
           if (node.type.name === "heading") return "Untitled";
           return "Press '/' for commands";
         },
+        showOnlyCurrent: true,
+        includeChildren: true,
       }),
       TaskList,
       TaskItem.configure({ nested: false }),
@@ -277,7 +279,12 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
   });
 
   useEffect(() => {
-    if (editor) editor.setEditable(editable);
+    if (editor) {
+      editor.setEditable(editable);
+      if (editable) {
+        editor.chain().focus("start").run();
+      }
+    }
   }, [editor, editable]);
 
   function showSlashMenu() {
