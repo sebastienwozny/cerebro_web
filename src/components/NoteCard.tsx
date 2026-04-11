@@ -129,7 +129,7 @@ export default function NoteCard({
           boxShadow: t > 0
             ? "none"
             : isSelected && openProgress < 0.1
-              ? "0 0 0 6px #ffffff, 0 4px 10px rgba(0,0,0,0.05)"
+              ? "0 0 0 8px #ffffff, 0 4px 10px rgba(0,0,0,0.05)"
               : isHovered
                 ? "0 20px 40px rgba(0,0,0,0.05)"
                 : "0 4px 10px rgba(0,0,0,0.05)",

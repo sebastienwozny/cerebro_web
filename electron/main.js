@@ -10,6 +10,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      scrollBounce: true,
     },
   });
 

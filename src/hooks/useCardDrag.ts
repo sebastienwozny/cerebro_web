@@ -33,7 +33,7 @@ export function useCardDrag(opts: UseCardDragOptions) {
   const targetPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const smoothPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const smoothRaf = useRef<number>(0);
-  const LERP_FACTOR = 0.25;
+  const LERP_FACTOR = 0.35;
 
   const tickSmooth = useCallback(() => {
     const { noteId, onDragMove } = optsRef.current;

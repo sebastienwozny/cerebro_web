@@ -39,7 +39,12 @@ export function useOpenClose(
       duration: CLOSE_DURATION,
       ease: "power3.out",
       onUpdate: () => setOpenProgress(progressRef.current.value),
-      onComplete: () => { setOpenNoteId(null); setClosingScrollOffset(0); },
+      onComplete: () => {
+        progressRef.current.value = 0;
+        setOpenProgress(0);
+        setOpenNoteId(null);
+        setClosingScrollOffset(0);
+      },
     });
   }, []);
 
