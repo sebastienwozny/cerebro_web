@@ -51,6 +51,11 @@ html, body, #root {
   to { opacity: 1; }
 }
 
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .tiptap strong { font-weight: 700; }
 
 /* ── TipTap prose styling (can't be utility-only) ── */

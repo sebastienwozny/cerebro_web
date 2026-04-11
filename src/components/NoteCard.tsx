@@ -14,6 +14,7 @@ interface Props {
   isOpen: boolean;
   isSelected: boolean;
   isDeleting: boolean;
+  isPopping?: boolean;
   openProgress: number;
   closingScrollOffset: number;
   hoverSuppressed: boolean;
@@ -37,11 +38,12 @@ function lerp(a: number, b: number, t: number) {
 
 export default function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
+  const hoverLockedRef = useRef(true); // locked on mount, unlocked on first mouseLeave
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { isDragging, dragRotation, handlePointerDown } = useCardDrag({
@@ -65,6 +67,7 @@ export default function NoteCard({
   useEffect(() => {
     if (isDragging) setIsHovered(false);
   }, [isDragging]);
+
 
   // Suppress scale after drag — re-enable when selection changes
   const wasDraggedRef = useRef(false);
@@ -125,6 +128,7 @@ export default function NoteCard({
                   : "translate3d(0,0,0)",
           opacity: isDeleting ? 0 : 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
+          animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
             ? "transform 0.45s cubic-bezier(0.165, 0.84, 0.44, 1), opacity 0.3s cubic-bezier(0.165, 0.84, 0.44, 1) 0.15s"
             : isDragging || isFollowing ? "opacity 0.3s ease-out" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
@@ -137,8 +141,8 @@ export default function NoteCard({
                 : "0 4px 10px rgba(0,0,0,0.05)",
         }}
         onPointerDown={handlePointerDown}
-        onMouseEnter={() => !isOpen && !hoverSuppressed && t < 0.1 && setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
+        onMouseEnter={() => !isOpen && !hoverSuppressed && !hoverLockedRef.current && t < 0.1 && setIsHovered(true)}
+        onMouseLeave={() => { setIsHovered(false); hoverLockedRef.current = false; }}
       >
         {/* Inner wrapper */}
         <div

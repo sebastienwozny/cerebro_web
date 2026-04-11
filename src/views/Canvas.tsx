@@ -32,6 +32,7 @@ export default function Canvas() {
 
   // Delete animation state
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [popIds, setPopIds] = useState<Set<string>>(new Set());
 
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
@@ -56,13 +57,15 @@ export default function Canvas() {
 
   // Double-click to create
   const handleDoubleClick = useCallback(
-    (e: React.MouseEvent) => {
+    async (e: React.MouseEvent) => {
       if (canvasLocked) return;
       if ((e.target as HTMLElement).closest("[data-notecard]")) return;
       const t = getTransform();
       const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
       const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
-      addNote(canvasX, canvasY);
+      const note = await addNote(canvasX, canvasY);
+      setPopIds(new Set([note.id]));
+      setTimeout(() => setPopIds(new Set()), 400);
     },
     [addNote, canvasLocked, getTransform, windowSize]
   );
@@ -251,6 +254,7 @@ export default function Canvas() {
                 isOpen={false}
                 isSelected={selectedIds.has(note.id)}
                 isDeleting={deletingIds.has(note.id)}
+                isPopping={popIds.has(note.id)}
                 openProgress={0}
                 closingScrollOffset={0}
                 hoverSuppressed={marquee !== null}
@@ -335,6 +339,29 @@ export default function Canvas() {
             zIndex: 9990,
           }}
         />
+      )}
+
+      {/* Add note button */}
+      {!canvasLocked && (
+        <button
+          className="fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none"
+          style={{
+            background: "var(--color-card)",
+            color: "var(--color-text-muted)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            zIndex: 100,
+          }}
+          onClick={async () => {
+            const t = getTransform();
+            const canvasX = -t.offsetX / t.scale;
+            const canvasY = -t.offsetY / t.scale;
+            const note = await addNote(canvasX, canvasY);
+            setPopIds(new Set([note.id]));
+            setTimeout(() => setPopIds(new Set()), 400);
+          }}
+        >
+          +
+        </button>
       )}
 
       {/* Empty state */}
