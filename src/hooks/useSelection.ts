@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Note } from "../store/db";
 import type { CanvasTransform } from "../store/useCanvas";
-import { CARD_W, CARD_H, CARD_CONTENT_W } from "../constants";
+import { getCardSize } from "../lib/cardDimensions";
 
 export interface MarqueeRect {
   x: number;
@@ -73,9 +73,7 @@ export function useSelection(
       const t = getTransform();
       const hit = new Set<string>();
       for (const note of notesRef.current) {
-        const isImageCard = note.kind === "image";
-        const cardW = isImageCard ? CARD_CONTENT_W : CARD_W;
-        const cardH = isImageCard && note.imageAspect > 0 ? CARD_CONTENT_W * note.imageAspect : CARD_H;
+        const { w: cardW, h: cardH } = getCardSize(note);
         const cx = windowW / 2 + note.positionX * t.scale + t.offsetX;
         const cy = windowH / 2 + note.positionY * t.scale + t.offsetY;
         const halfW = (cardW * t.scale) / 2;

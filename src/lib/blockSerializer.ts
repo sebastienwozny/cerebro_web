@@ -58,7 +58,6 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
         id: crypto.randomUUID(),
         type: typeMap[level] ?? "heading1",
         content: textContent(node),
-        isChecked: false,
       });
     } else if (node.type === "bulletList") {
       for (const li of node.content ?? []) {
@@ -66,7 +65,6 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
           id: crypto.randomUUID(),
           type: "bulletList",
           content: textContent(li),
-          isChecked: false,
         });
       }
     } else if (node.type === "taskList") {
@@ -86,7 +84,6 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
           id: crypto.randomUUID(),
           type: "quote",
           content: textContent(p),
-          isChecked: false,
         });
       }
     } else {
@@ -94,7 +91,6 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
         id: crypto.randomUUID(),
         type: "text",
         content: textContent(node),
-        isChecked: false,
       });
     }
   }

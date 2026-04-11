@@ -3,14 +3,18 @@ import { v4 as uuid } from "uuid";
 import { db, type Note, type NoteBlock } from "./db";
 
 function makeBlock(type: NoteBlock["type"] = "text"): NoteBlock {
-  return { id: uuid(), type, content: "", isChecked: false };
+  return { id: uuid(), type, content: "" };
+}
+
+function getMaxZ(notes: Note[]): number {
+  return notes.length > 0 ? Math.max(...notes.map((n) => n.zOrder)) : 0;
 }
 
 export function useNotes() {
   const notes = useLiveQuery(() => db.notes.orderBy("zOrder").toArray()) ?? [];
 
   async function addNote(x: number, y: number): Promise<Note> {
-    const maxZ = notes.length > 0 ? Math.max(...notes.map((n) => n.zOrder)) : 0;
+    const maxZ = getMaxZ(notes);
     const note: Note = {
       id: uuid(),
       kind: "note",
@@ -35,7 +39,7 @@ export function useNotes() {
   }
 
   async function bringToFront(id: string) {
-    const maxZ = notes.length > 0 ? Math.max(...notes.map((n) => n.zOrder)) : 0;
+    const maxZ = getMaxZ(notes);
     await db.notes.update(id, { zOrder: maxZ + 1 });
   }
 

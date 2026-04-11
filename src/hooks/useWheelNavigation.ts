@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { PAN_MULTIPLIER } from "../constants";
 
 export function useWheelNavigation(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -16,7 +17,7 @@ export function useWheelNavigation(
       if (e.ctrlKey || e.metaKey) {
         zoom(e.deltaY, e.clientX, e.clientY, windowW, windowH);
       } else {
-        pan(-e.deltaX * 1.3, -e.deltaY * 1.3);
+        pan(-e.deltaX * PAN_MULTIPLIER, -e.deltaY * PAN_MULTIPLIER);
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });

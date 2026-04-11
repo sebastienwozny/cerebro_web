@@ -15,7 +15,7 @@ export interface NoteBlock {
   id: string;
   type: BlockType;
   content: string;
-  isChecked: boolean;
+  isChecked?: boolean;
 }
 
 // ── Card kind ──

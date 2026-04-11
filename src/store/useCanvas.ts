@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { MIN_SCALE, MAX_SCALE } from "../constants";
+import { MIN_SCALE, MAX_SCALE, ZOOM_SENSITIVITY } from "../constants";
 
 export interface CanvasTransform {
   offsetX: number;
@@ -50,7 +50,7 @@ export function useCanvas() {
   const zoom = useCallback(
     (delta: number, cx: number, cy: number, windowW: number, windowH: number) => {
       const t = transformRef.current;
-      const factor = Math.pow(0.988, delta);
+      const factor = Math.pow(ZOOM_SENSITIVITY, delta);
       const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor));
       const cursorFromCenterX = cx - windowW / 2;
       const cursorFromCenterY = cy - windowH / 2;

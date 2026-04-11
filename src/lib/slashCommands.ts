@@ -1,14 +1,14 @@
 import type { BlockType } from "../store/db";
 import type { Editor } from "@tiptap/react";
 
-export const SLASH_COMMANDS: { label: string; type: BlockType; shortcut: string }[] = [
-  { label: "Text", type: "text", shortcut: "/" },
-  { label: "Heading 1", type: "heading1", shortcut: "/h1" },
-  { label: "Heading 2", type: "heading2", shortcut: "/h2" },
-  { label: "Heading 3", type: "heading3", shortcut: "/h3" },
-  { label: "Bullet List", type: "bulletList", shortcut: "/ul" },
-  { label: "To-Do", type: "todo", shortcut: "/todo" },
-  { label: "Quote", type: "quote", shortcut: "/quote" },
+export const SLASH_COMMANDS: { label: string; type: BlockType }[] = [
+  { label: "Text", type: "text" },
+  { label: "Heading 1", type: "heading1" },
+  { label: "Heading 2", type: "heading2" },
+  { label: "Heading 3", type: "heading3" },
+  { label: "Bullet List", type: "bulletList" },
+  { label: "To-Do", type: "todo" },
+  { label: "Quote", type: "quote" },
 ];
 
 export function executeSlashCommand(editor: Editor, cmd: (typeof SLASH_COMMANDS)[number]) {

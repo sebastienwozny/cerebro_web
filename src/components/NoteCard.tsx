@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
-import { CARD_W, CARD_H, CARD_CONTENT_W, CARD_RADIUS } from "../constants";
+import { CARD_CONTENT_W, CARD_RADIUS } from "../constants";
+import { getCardSize } from "../lib/cardDimensions";
 
 interface Props {
   note: Note;
@@ -75,8 +76,7 @@ export default function NoteCard({
   }, [isSelected]);
 
   const isImageCard = note.kind === "image";
-  const cardW = isImageCard ? CARD_CONTENT_W : CARD_W;
-  const cardH = isImageCard && note.imageAspect > 0 ? CARD_CONTENT_W * note.imageAspect : CARD_H;
+  const { w: cardW, h: cardH } = getCardSize(note);
 
   const t = openProgress;
 
@@ -256,4 +256,3 @@ export default function NoteCard({
   );
 }
 
-export { CARD_W, CARD_H, CARD_CONTENT_W };
