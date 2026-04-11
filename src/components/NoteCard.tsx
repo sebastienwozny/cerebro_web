@@ -84,20 +84,23 @@ export default function NoteCard({
   const cardH = isImageCard && note.imageAspect > 0 ? CARD_CONTENT_W * note.imageAspect : CARD_H;
 
   const t = openProgress;
-  const scl = lerp(scale, 1, t);
-  // Accelerated progress for bg/radius/shadow — gone by ~33% of animation
   const tFast = t;
 
-  // Visual position: lerp the top-left corner directly for a straight-line trajectory
-  const liveMidX = windowW / 2 + note.positionX * scale + offsetX;
-  const liveMidY = windowH / 2 + note.positionY * scale + offsetY;
-  // Start: visual top-left in canvas | End: card centered horizontally, top at y=0
-  const startLeft = liveMidX - (cardW * scale) / 2;
-  const startTop = liveMidY - (cardH * scale) / 2;
-  const endLeft = (windowW - cardW) / 2;
-  const endTop = 0;
-  const visualLeft = lerp(startLeft, endLeft, t);
-  const visualTop = lerp(startTop, endTop, t);
+  // Cards at t=0 are positioned in canvas-space (parent div handles offset+scale).
+  // Cards at t>0 lerp to screen-space position.
+  const canvasLeft = note.positionX - cardW / 2;
+  const canvasTop = note.positionY - cardH / 2;
+
+  // Screen-space positions for open animation
+  const screenLeft = (windowW - cardW) / 2;
+  const screenTop = 0;
+  // Where the card currently is on screen (canvas-space → screen-space)
+  const cardScreenLeft = windowW / 2 + note.positionX * scale + offsetX - (cardW * scale) / 2;
+  const cardScreenTop = windowH / 2 + note.positionY * scale + offsetY - (cardH * scale) / 2;
+
+  const scl = t > 0 ? lerp(scale, 1, t) : 1; // in canvas layer, scale is on parent
+  const visualLeft = t > 0 ? lerp(cardScreenLeft, screenLeft, t) : canvasLeft;
+  const visualTop = t > 0 ? lerp(cardScreenTop, screenTop, t) : canvasTop;
   const editing = openProgress >= 1;
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -173,27 +176,26 @@ export default function NoteCard({
       style={{
         left: visualLeft,
         top: visualTop,
-        width: cardW * scl,
-        height: cardH * scl,
-        borderRadius: CARD_RADIUS * scl * (1 - tFast),
+        width: t > 0 ? cardW * scl : cardW,
+        height: t > 0 ? cardH * scl : cardH,
+        borderRadius: t > 0 ? CARD_RADIUS * scl * (1 - tFast) : CARD_RADIUS,
         overflow: "hidden",
         cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
         zIndex: openProgress > 0 ? 9999 : note.zOrder,
         transform: isDragging
-          ? `rotate(${dragRotation}deg)`
+          ? `translate3d(0,0,0) rotate(${dragRotation}deg)`
           : isHovered && t < 0.1
-            ? "scale(1.02)"
-            : "none",
+            ? "translate3d(0,0,0) scale(1.02)"
+            : "translate3d(0,0,0)",
         transformOrigin: isDragging ? "top center" : "center",
-        transition: isDragging ? "none" : "transform 0.15s ease-out",
-        filter: t > 0
+        transition: isDragging ? "none" : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+        boxShadow: t > 0
           ? "none"
           : isDragging
-            ? `drop-shadow(0 ${20 * scl}px ${20 * scl}px rgba(0,0,0,0.08))`
+            ? "0 20px 40px rgba(0,0,0,0.08)"
             : isHovered
-              ? `drop-shadow(0 ${20 * scl}px ${20 * scl}px rgba(0,0,0,0.05))`
-              : `drop-shadow(0 ${4 * scl}px ${5 * scl}px rgba(0,0,0,0.05))`,
-        willChange: t > 0 || isDragging ? "transform" : "auto",
+              ? "0 20px 40px rgba(0,0,0,0.05)"
+              : "0 4px 10px rgba(0,0,0,0.05)",
       }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -206,7 +208,7 @@ export default function NoteCard({
         style={{
           width: cardW,
           height: cardH,
-          transform: `scale(${scl})`,
+          transform: t > 0 ? `scale(${scl})` : "none",
           transformOrigin: "top left",
         }}
       >

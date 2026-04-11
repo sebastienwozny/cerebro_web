@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 export interface CanvasTransform {
   offsetX: number;
@@ -19,46 +19,57 @@ function loadSaved(): CanvasTransform {
 }
 
 export function useCanvas() {
-  const [transform, setTransform] = useState<CanvasTransform>(loadSaved);
+  // Mutable ref — updated on every pan/zoom without triggering React re-renders
+  const transformRef = useRef<CanvasTransform>(loadSaved());
+  // DOM ref for the canvas layer div — we write transforms directly to it
+  const layerRef = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const scheduleSave = useCallback((t: CanvasTransform) => {
+  const scheduleSave = useCallback(() => {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(transformRef.current));
     }, 300);
+  }, []);
+
+  // Apply transform directly to DOM — no React re-render
+  const applyTransform = useCallback(() => {
+    const el = layerRef.current;
+    if (!el) return;
+    const { offsetX, offsetY, scale } = transformRef.current;
+    el.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
   }, []);
 
   const pan = useCallback(
     (dx: number, dy: number) => {
-      setTransform((t) => {
-        const next = { ...t, offsetX: t.offsetX + dx, offsetY: t.offsetY + dy };
-        scheduleSave(next);
-        return next;
-      });
+      const t = transformRef.current;
+      t.offsetX += dx;
+      t.offsetY += dy;
+      applyTransform();
+      scheduleSave();
     },
-    [scheduleSave]
+    [applyTransform, scheduleSave]
   );
 
   const zoom = useCallback(
     (delta: number, cx: number, cy: number, windowW: number, windowH: number) => {
-      setTransform((t) => {
-        const factor = Math.pow(0.988, delta);
-        const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor));
-        // Cursor position relative to canvas center
-        const cursorFromCenterX = cx - windowW / 2;
-        const cursorFromCenterY = cy - windowH / 2;
-        // Zoom towards cursor: adjust offset so the point under the cursor stays fixed
-        const ratio = newScale / t.scale;
-        const newOffsetX = cursorFromCenterX - ratio * (cursorFromCenterX - t.offsetX);
-        const newOffsetY = cursorFromCenterY - ratio * (cursorFromCenterY - t.offsetY);
-        const next = { offsetX: newOffsetX, offsetY: newOffsetY, scale: newScale };
-        scheduleSave(next);
-        return next;
-      });
+      const t = transformRef.current;
+      const factor = Math.pow(0.988, delta);
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor));
+      const cursorFromCenterX = cx - windowW / 2;
+      const cursorFromCenterY = cy - windowH / 2;
+      const ratio = newScale / t.scale;
+      t.offsetX = cursorFromCenterX - ratio * (cursorFromCenterX - t.offsetX);
+      t.offsetY = cursorFromCenterY - ratio * (cursorFromCenterY - t.offsetY);
+      t.scale = newScale;
+      applyTransform();
+      scheduleSave();
     },
-    [scheduleSave]
+    [applyTransform, scheduleSave]
   );
 
-  return { transform, pan, zoom, setTransform };
+  // Read current transform (for open animation, double-click positioning, etc.)
+  const getTransform = useCallback(() => transformRef.current, []);
+
+  return { transformRef, layerRef, pan, zoom, getTransform, applyTransform };
 }
