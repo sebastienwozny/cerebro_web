@@ -47,7 +47,11 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       hideSlashMenu();
     },
     editorProps: {
+      scrollThreshold: 0,
+      scrollMargin: 0,
       handlePaste: (view, event) => {
+        const scrollEl = view.dom.closest("[data-editor-overlay]");
+        const scrollTop = scrollEl?.scrollTop ?? 0;
         const text = event.clipboardData?.getData("text/plain");
         if (text && looksLikeMarkdown(text)) {
           event.preventDefault();
@@ -56,11 +60,14 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
           const tempDiv = document.createElement("div");
           tempDiv.innerHTML = converted;
           const slice = parser.parseSlice(tempDiv);
-          const tr = view.state.tr.replaceSelection(slice);
+          const tr = view.state.tr.replaceSelection(slice).scrollIntoView();
           view.dispatch(tr);
-          return true;
         }
-        return false;
+        // Restore scroll position after paste
+        requestAnimationFrame(() => {
+          if (scrollEl) scrollEl.scrollTop = scrollTop;
+        });
+        return text && looksLikeMarkdown(text) ? true : false;
       },
       handleKeyDown: (_view, event) => {
         if (event.key === "/" && slashMenuRef.current?.style.display !== "block") {
