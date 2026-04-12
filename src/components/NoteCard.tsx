@@ -126,11 +126,11 @@ function NoteCard({
                 : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
                   ? "scale(1.02)"
                   : "none",
-          opacity: isDeleting ? 0 : 1,
+          opacity: 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
-          animation: isPopping ? "popIn 0.3s ease-out forwards" : undefined,
+          animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
-            ? "transform 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19)"
+            ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
             : isDragging || isFollowing
               ? "opacity 0.3s ease-out"
               : isAnimating
@@ -212,8 +212,8 @@ function NoteCard({
             <div
               className="absolute bottom-0 left-0 right-0 pointer-events-none"
               style={{
-                height: 120,
-                background: "linear-gradient(to bottom, transparent, var(--color-card))",
+                height: 200,
+                background: "linear-gradient(to bottom, transparent 0%, var(--color-card) 70%)",
                 opacity: 1 - openProgress * 10,
                 borderRadius: `0 0 ${CARD_RADIUS}px ${CARD_RADIUS}px`,
               }}

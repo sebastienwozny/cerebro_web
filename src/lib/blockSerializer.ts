@@ -37,6 +37,44 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
   return parts.join("");
 }
 
+/** Like blocksToHtml but renders checkboxes for static preview (no TipTap) */
+export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
+  const parts: string[] = [];
+  let i = 0;
+  while (i < blocks.length) {
+    const b = blocks[i];
+    const c = escapeHtml(b.content);
+    if (b.type === "bulletList") {
+      let items = `<li><p>${c}</p></li>`;
+      while (++i < blocks.length && blocks[i].type === "bulletList") {
+        items += `<li><p>${escapeHtml(blocks[i].content)}</p></li>`;
+      }
+      parts.push(`<ul>${items}</ul>`);
+    } else if (b.type === "todo") {
+      const renderTodo = (block: NoteBlock) => {
+        const checked = block.isChecked ? "checked" : "";
+        const content = escapeHtml(block.content);
+        return `<li data-type="taskItem" data-checked="${block.isChecked ?? false}"><label><input type="checkbox" ${checked}></label><div><p>${content}</p></div></li>`;
+      };
+      let items = renderTodo(b);
+      while (++i < blocks.length && blocks[i].type === "todo") {
+        items += renderTodo(blocks[i]);
+      }
+      parts.push(`<ul data-type="taskList">${items}</ul>`);
+    } else {
+      switch (b.type) {
+        case "heading1": parts.push(`<h1>${c}</h1>`); break;
+        case "heading2": parts.push(`<h2>${c}</h2>`); break;
+        case "heading3": parts.push(`<h3>${c}</h3>`); break;
+        case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
+        default: parts.push(`<p>${c || ""}</p>`);
+      }
+      i++;
+    }
+  }
+  return parts.join("");
+}
+
 function textContent(node: Record<string, unknown>): string {
   if (typeof node.text === "string") return node.text;
   const children = node.content as Record<string, unknown>[] | undefined;

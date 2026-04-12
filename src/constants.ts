@@ -9,7 +9,7 @@ export const OPEN_DURATION = 0.5;
 export const CLOSE_DURATION = 0.45;
 
 // Delete animation duration (seconds) — matches CSS transition in NoteCard
-export const DELETE_DURATION = 0.3;
+export const DELETE_DURATION = 0.4;
 
 // Canvas zoom bounds
 export const MIN_SCALE = 0.1;

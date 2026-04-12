@@ -5,7 +5,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -111,6 +111,32 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
     }
   }, [editor, editable]);
 
+  // Click below content to insert empty lines
+  useEffect(() => {
+    if (!editor || !editable) return;
+    const overlay = editor.view.dom.closest("[data-editor-overlay]");
+    if (!overlay) return;
+    const handleOverlayClick = (e: Event) => {
+      const me = e as MouseEvent;
+      const tiptap = editor.view.dom;
+      const lastChild = tiptap.lastElementChild as HTMLElement | null;
+      const contentBottom = lastChild
+        ? lastChild.getBoundingClientRect().bottom
+        : tiptap.getBoundingClientRect().top;
+      if (me.clientY <= contentBottom) return;
+      const sampleP = tiptap.querySelector("p");
+      const lineH = sampleP
+        ? sampleP.getBoundingClientRect().height + parseFloat(getComputedStyle(sampleP).marginBottom)
+        : 40;
+      const linesToAdd = Math.max(1, Math.round((me.clientY - contentBottom) / lineH));
+      const paragraphs = Array.from({ length: linesToAdd }, () => ({ type: "paragraph" }));
+      const endPos = editor.state.doc.content.size;
+      editor.chain().insertContentAt(endPos, paragraphs).focus("end").run();
+    };
+    overlay.addEventListener("click", handleOverlayClick);
+    return () => overlay.removeEventListener("click", handleOverlayClick);
+  }, [editor, editable]);
+
   function showSlashMenu() {
     const menu = slashMenuRef.current;
     if (!menu || !editor) return;
@@ -133,26 +159,6 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
     });
   }
 
-  const handleSpacerClick = useCallback((e: React.MouseEvent) => {
-    if (!editor || !editable) return;
-    e.preventDefault();
-    // Find the actual bottom of the last content node inside the editor
-    const tiptapEl = (e.currentTarget as HTMLElement).parentElement?.querySelector(".tiptap") as HTMLElement | null;
-    if (!tiptapEl) return;
-    const lastChild = tiptapEl.lastElementChild as HTMLElement | null;
-    const contentBottom = lastChild
-      ? lastChild.getBoundingClientRect().bottom
-      : tiptapEl.getBoundingClientRect().top;
-    const distance = e.clientY - contentBottom;
-    // Measure actual line height from an existing paragraph, fallback to 40
-    const sampleP = tiptapEl.querySelector("p");
-    const lineHeight = sampleP ? sampleP.getBoundingClientRect().height + parseFloat(getComputedStyle(sampleP).marginBottom) : 40;
-    const linesToAdd = Math.max(1, Math.round(distance / lineHeight));
-    const paragraphs = Array.from({ length: linesToAdd }, () => ({ type: "paragraph" }));
-    const endPos = editor.state.doc.content.size;
-    editor.chain().insertContentAt(endPos, paragraphs).focus("end").run();
-  }, [editor, editable]);
-
   return (
     <div className="note-editor">
       {headerImageUrl && (
@@ -161,12 +167,6 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
         </div>
       )}
       <EditorContent editor={editor} />
-      {editable && (
-        <div
-          style={{ flexGrow: 1, minHeight: "60vh", cursor: "text" }}
-          onClick={handleSpacerClick}
-        />
-      )}
       <div ref={slashMenuRef} className="slash-menu" style={{ display: "none" }}>
         {SLASH_COMMANDS.map((cmd, i) => (
           <div

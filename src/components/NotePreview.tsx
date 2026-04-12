@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import type { NoteBlock } from "../store/db";
-import { blocksToHtml } from "../lib/blockSerializer";
+import { blocksToPreviewHtml } from "../lib/blockSerializer";
 
 interface Props {
   blocks: NoteBlock[];
@@ -8,7 +8,7 @@ interface Props {
 }
 
 function NotePreview({ blocks, headerImageUrl }: Props) {
-  const html = useMemo(() => blocksToHtml(blocks), [blocks]);
+  const html = useMemo(() => blocksToPreviewHtml(blocks), [blocks]);
 
   return (
     <div className="note-editor">
