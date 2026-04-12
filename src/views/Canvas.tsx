@@ -9,14 +9,20 @@ import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import { DELETE_DURATION } from "../constants";
+import { getCardSize } from "../lib/cardDimensions";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
+import NotePreview from "../components/NotePreview";
 
 const undoStack = new CanvasUndoStack();
+const ZERO_DELTA = { dx: 0, dy: 0 };
+const NOOP = () => {};
+const NOOP_ID = (_id: string) => {};
 
 export default function Canvas() {
   const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
-  const { transformRef, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
+  const { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
+  void transformVersion;
   const containerRef = useRef<HTMLDivElement>(null);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
@@ -37,12 +43,19 @@ export default function Canvas() {
   // Delete animation state
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [popIds, setPopIds] = useState<Set<string>>(new Set());
+  const popTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const triggerPop = useCallback((ids: string[]) => {
+    setPopIds(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next; });
+    clearTimeout(popTimerRef.current);
+    popTimerRef.current = setTimeout(() => setPopIds(new Set()), 400);
+  }, []);
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
 
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
   const [groupDragRotation, setGroupDragRotation] = useState(0);
   const groupDragDeltaRef = useRef({ dx: 0, dy: 0 });
+  const groupDragRafRef = useRef(0);
   // Stores start positions for ALL cards in the group (leader + followers)
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -95,8 +108,7 @@ export default function Canvas() {
           }
         });
         // Pop animation on restored cards
-        setPopIds(new Set(ids));
-        setTimeout(() => setPopIds(new Set()), 400);
+        triggerPop(ids);
         return inverse;
       }
       case "create": {
@@ -147,7 +159,7 @@ export default function Canvas() {
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
     closeNote, clearSelection, selectAll, deleteNote, openNote,
     onUndo: performUndo, onRedo: performRedo,
-    recordAction: (action) => undoStack.record(action),
+    recordAction: undoStack.record.bind(undoStack),
   });
 
   // Double-click to create
@@ -160,10 +172,9 @@ export default function Canvas() {
       const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
       const note = await addNote(canvasX, canvasY);
       undoStack.record({ type: "create", noteIds: [note.id] });
-      setPopIds(new Set([note.id]));
-      setTimeout(() => setPopIds(new Set()), 400);
+      triggerPop([note.id]);
     },
-    [addNote, canvasLocked, getTransform, windowSize]
+    [addNote, canvasLocked, getTransform, windowSize, triggerPop]
   );
 
   const handleCardTap = useCallback(
@@ -207,7 +218,12 @@ export default function Canvas() {
         const dx = newX - leadStartRef.current.x;
         const dy = newY - leadStartRef.current.y;
         groupDragDeltaRef.current = { dx, dy };
-        setGroupDragDelta({ dx, dy });
+        if (!groupDragRafRef.current) {
+          groupDragRafRef.current = requestAnimationFrame(() => {
+            groupDragRafRef.current = 0;
+            setGroupDragDelta({ ...groupDragDeltaRef.current });
+          });
+        }
       } else {
         // Solo drag — update DB directly
         updateNote(noteId, { positionX: newX, positionY: newY });
@@ -365,7 +381,6 @@ export default function Canvas() {
           left: windowSize.w / 2,
           top: windowSize.h / 2,
           transformOrigin: "0 0",
-          willChange: "transform",
         }}
       >
         {notes.map((note) => {
@@ -377,6 +392,22 @@ export default function Canvas() {
           const noteForCard = startPos
             ? { ...note, positionX: startPos.x, positionY: startPos.y }
             : note;
+
+          // Viewport culling — skip cards outside visible area
+          const { w: cw, h: ch } = getCardSize(noteForCard);
+          const s = transformRef.current.scale;
+          const ox = transformRef.current.offsetX;
+          const oy = transformRef.current.offsetY;
+          const screenX = windowSize.w / 2 + noteForCard.positionX * s + ox;
+          const screenY = windowSize.h / 2 + noteForCard.positionY * s + oy;
+          const margin = 400;
+          const isVisible =
+            screenX + (cw / 2) * s > -margin &&
+            screenX - (cw / 2) * s < windowSize.w + margin &&
+            screenY + (ch / 2) * s > -margin &&
+            screenY - (ch / 2) * s < windowSize.h + margin;
+          if (!isVisible && !selectedIds.has(note.id) && !deletingIds.has(note.id) && !inGroupDrag && !popIds.has(note.id)) return null;
+
           return (
             <div
               key={note.id}
@@ -385,10 +416,10 @@ export default function Canvas() {
               <NoteCard
                 note={noteForCard}
                 scale={transformRef.current.scale}
-                offsetX={transformRef.current.offsetX}
-                offsetY={transformRef.current.offsetY}
-                windowW={windowSize.w}
-                windowH={windowSize.h}
+                offsetX={0}
+                offsetY={0}
+                windowW={0}
+                windowH={0}
                 isOpen={false}
                 isSelected={selectedIds.has(note.id)}
                 isDeleting={deletingIds.has(note.id)}
@@ -397,10 +428,10 @@ export default function Canvas() {
                 openProgress={0}
                 closingScrollOffset={0}
                 hoverSuppressed={marquee !== null}
-                groupDragDelta={inGroupDrag ? groupDragDelta : { dx: 0, dy: 0 }}
+                groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
                 groupDragRotation={inGroupDrag ? groupDragRotation : 0}
-                onTap={() => handleCardTap(note.id)}
-                onShiftTap={() => handleCardShiftTap(note.id)}
+                onTap={handleCardTap}
+                onShiftTap={handleCardShiftTap}
                 onClose={closeNote}
                 onDragStart={handleDragStart}
                 onDragMove={handleDragMove}
@@ -409,13 +440,8 @@ export default function Canvas() {
                 onDragDuplicate={handleDragDuplicate}
                 onBringToFront={bringToFront}
               >
-                <NoteEditor
+                <NotePreview
                   blocks={note.blocks}
-                  onUpdate={(blocks) => {
-                    const title = blocks[0]?.content ?? "";
-                    updateNote(note.id, { blocks, title });
-                  }}
-                  editable={false}
                   headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
                 />
               </NoteCard>
@@ -442,10 +468,10 @@ export default function Canvas() {
             hoverSuppressed={false}
             groupDragDelta={{ dx: 0, dy: 0 }}
             groupDragRotation={0}
-            onTap={() => {}}
-            onShiftTap={() => {}}
+            onTap={NOOP_ID}
+            onShiftTap={NOOP_ID}
             onClose={closeNote}
-            onDragStart={() => {}}
+            onDragStart={NOOP_ID}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
             onBringToFront={bringToFront}
@@ -490,14 +516,15 @@ export default function Canvas() {
             boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
             zIndex: 100,
           }}
+          onDoubleClick={(e) => e.stopPropagation()}
           onClick={async () => {
             const t = getTransform();
-            const canvasX = -t.offsetX / t.scale;
-            const canvasY = -t.offsetY / t.scale;
+            const spread = 40;
+            const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+            const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
             const note = await addNote(canvasX, canvasY);
             undoStack.record({ type: "create", noteIds: [note.id] });
-            setPopIds(new Set([note.id]));
-            setTimeout(() => setPopIds(new Set()), 400);
+            triggerPop([note.id]);
           }}
         >
           +

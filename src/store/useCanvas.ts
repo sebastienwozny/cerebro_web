@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { MIN_SCALE, MAX_SCALE, ZOOM_SENSITIVITY } from "../constants";
 
 export interface CanvasTransform {
@@ -21,7 +21,7 @@ export function useCanvas() {
   const transformRef = useRef<CanvasTransform>(loadSaved());
   const layerRef = useRef<HTMLDivElement>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
+  const [transformVersion, setTransformVersion] = useState(0);
   const scheduleSave = useCallback(() => {
     clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
@@ -29,12 +29,23 @@ export function useCanvas() {
     }, 300);
   }, []);
 
+  const rafRef = useRef(0);
+  const scheduleRerender = useCallback(() => {
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        setTransformVersion(v => v + 1);
+      });
+    }
+  }, []);
+
   const applyTransform = useCallback(() => {
     const el = layerRef.current;
     if (!el) return;
     const { offsetX, offsetY, scale } = transformRef.current;
     el.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
-  }, []);
+    scheduleRerender();
+  }, [scheduleRerender]);
 
   const pan = useCallback(
     (dx: number, dy: number) => {
@@ -66,5 +77,5 @@ export function useCanvas() {
 
   const getTransform = useCallback(() => transformRef.current, []);
 
-  return { transformRef, layerRef, pan, zoom, getTransform, applyTransform };
+  return { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform };
 }

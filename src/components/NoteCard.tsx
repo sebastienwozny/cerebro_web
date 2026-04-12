@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
 import { CARD_CONTENT_W, CARD_RADIUS } from "../constants";
@@ -21,8 +21,8 @@ interface Props {
   hoverSuppressed: boolean;
   groupDragDelta: { dx: number; dy: number };
   groupDragRotation: number;
-  onTap: () => void;
-  onShiftTap: () => void;
+  onTap: (noteId: string) => void;
+  onShiftTap: (noteId: string) => void;
   onClose: () => void;
   onDragStart: (noteId: string) => void;
   onDragMove: (noteId: string, dx: number, dy: number) => void;
@@ -37,7 +37,7 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-export default function NoteCard({
+function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
@@ -112,6 +112,7 @@ export default function NoteCard({
       <div
         className="absolute select-none pointer-events-auto"
         style={{
+          contain: "layout style paint",
           left: visualLeft,
           top: visualTop,
           width: t > 0 ? cardW * scl : cardW,
@@ -121,15 +122,15 @@ export default function NoteCard({
           cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
           zIndex: openProgress > 0 ? 9999 : note.zOrder,
           transform: isDeleting
-            ? "translate3d(0,0,0) scale(0)"
+            ? "scale(0)"
             : isDragging || isFollowing
-                ? `translate3d(0,0,0) rotate(${rotation}deg)`
+                ? `rotate(${rotation}deg)`
                 : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
-                  ? "translate3d(0,0,0) scale(1.02)"
-                  : "translate3d(0,0,0)",
+                  ? "scale(1.02)"
+                  : "none",
           opacity: isDeleting ? 0 : 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
-          animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
+          animation: isPopping ? "popIn 0.3s ease-out" : undefined,
           transition: isDeleting
             ? "transform 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19)"
             : isDragging || isFollowing
@@ -267,3 +268,4 @@ export default function NoteCard({
   );
 }
 
+export default React.memo(NoteCard);

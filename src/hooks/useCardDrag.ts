@@ -9,8 +9,8 @@ interface UseCardDragOptions {
   scale: number;
   isOpen: boolean;
   openProgress: number;
-  onTap: () => void;
-  onShiftTap: () => void;
+  onTap: (noteId: string) => void;
+  onShiftTap: (noteId: string) => void;
   onDragStart: (noteId: string) => void;
   onDragMove: (noteId: string, x: number, y: number) => void;
   onDragEnd: (noteId: string) => void;
@@ -103,8 +103,8 @@ export function useCardDrag(opts: UseCardDragOptions) {
           smoothRaf.current = 0;
         }
         if (!isDraggingRef.current) {
-          if (ue.shiftKey) onShiftTap();
-          else onTap();
+          if (ue.shiftKey) onShiftTap(nid);
+          else onTap(nid);
         } else {
           onDragMove(nid, targetPos.current.x, targetPos.current.y);
           onDragEnd(nid);
