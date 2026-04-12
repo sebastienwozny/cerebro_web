@@ -52,14 +52,22 @@ html, body, #root {
 }
 
 @keyframes popIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .tiptap strong { font-weight: 700; }
 
 /* ── TipTap prose styling (can't be utility-only) ── */
-.tiptap { @apply outline-none min-h-full pb-20; }
+.tiptap {
+  @apply outline-none min-h-full pb-20;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  -webkit-font-variant-ligatures: none;
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0;
+}
 .tiptap > *:first-child { @apply mt-0; }
 
 /* Headings — larger margin-top for clear separation */

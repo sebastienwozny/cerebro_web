@@ -70,16 +70,15 @@ function NoteCard({
   }, [isDragging]);
 
 
-  // Suppress scale after drag — re-enable when selection changes
+  // Suppress scale after drag — re-enable when drag ends or selection changes
   const wasDraggedRef = useRef(false);
   useEffect(() => {
     if (isDragging || groupDragDelta.dx !== 0 || groupDragDelta.dy !== 0) {
       wasDraggedRef.current = true;
+    } else {
+      wasDraggedRef.current = false;
     }
   }, [isDragging, groupDragDelta]);
-  useEffect(() => {
-    if (!isSelected) wasDraggedRef.current = false;
-  }, [isSelected]);
 
   const isImageCard = note.kind === "image";
   const { w: cardW, h: cardH } = getCardSize(note);
@@ -130,7 +129,7 @@ function NoteCard({
                   : "none",
           opacity: isDeleting ? 0 : 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
-          animation: isPopping ? "popIn 0.3s ease-out" : undefined,
+          animation: isPopping ? "popIn 0.3s ease-out forwards" : undefined,
           transition: isDeleting
             ? "transform 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19)"
             : isDragging || isFollowing
