@@ -169,9 +169,10 @@ export default function Canvas() {
       const t = getTransform();
       const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
       const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
-      const note = await addNote(canvasX, canvasY);
-      undoStack.record({ type: "create", noteIds: [note.id] });
-      triggerPop([note.id]);
+      const noteId = crypto.randomUUID();
+      triggerPop([noteId]);
+      undoStack.record({ type: "create", noteIds: [noteId] });
+      await addNote(canvasX, canvasY, noteId);
     },
     [addNote, canvasLocked, getTransform, windowSize, triggerPop]
   );
@@ -521,9 +522,10 @@ export default function Canvas() {
             const spread = 40;
             const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
             const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
-            const note = await addNote(canvasX, canvasY);
-            undoStack.record({ type: "create", noteIds: [note.id] });
-            triggerPop([note.id]);
+            const noteId = crypto.randomUUID();
+            triggerPop([noteId]);
+            undoStack.record({ type: "create", noteIds: [noteId] });
+            await addNote(canvasX, canvasY, noteId);
           }}
         >
           +

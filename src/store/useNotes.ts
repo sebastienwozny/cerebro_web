@@ -13,10 +13,10 @@ function getMaxZ(notes: Note[]): number {
 export function useNotes() {
   const notes = useLiveQuery(() => db.notes.orderBy("zOrder").toArray()) ?? [];
 
-  async function addNote(x: number, y: number): Promise<Note> {
+  async function addNote(x: number, y: number, id?: string): Promise<Note> {
     const maxZ = getMaxZ(notes);
     const note: Note = {
-      id: uuid(),
+      id: id ?? uuid(),
       kind: "note",
       title: "",
       blocks: [makeBlock("heading1")],
