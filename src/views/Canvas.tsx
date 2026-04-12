@@ -16,7 +16,6 @@ import NotePreview from "../components/NotePreview";
 
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
-const NOOP = () => {};
 const NOOP_ID = (_id: string) => {};
 
 export default function Canvas() {
