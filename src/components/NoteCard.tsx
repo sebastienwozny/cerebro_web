@@ -44,7 +44,6 @@ function NoteCard({
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
-  const hoverLockedRef = useRef(true); // locked on mount, unlocked on first mouseLeave
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const { isDragging, dragRotation, handlePointerDown } = useCardDrag({
@@ -146,8 +145,8 @@ function NoteCard({
                 : "0 4px 10px rgba(0,0,0,0.05)",
         }}
         onPointerDown={handlePointerDown}
-        onMouseEnter={() => !isOpen && !hoverSuppressed && !hoverLockedRef.current && t < 0.1 && setIsHovered(true)}
-        onMouseLeave={() => { setIsHovered(false); hoverLockedRef.current = false; }}
+        onMouseEnter={() => !isOpen && !hoverSuppressed && !isPopping && t < 0.1 && setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         {/* Inner wrapper */}
         <div
