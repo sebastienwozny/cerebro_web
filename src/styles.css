@@ -55,7 +55,7 @@ html, body, #root {
 
 /* ── TipTap prose styling (can't be utility-only) ── */
 .tiptap {
-  @apply outline-none min-h-full pb-20;
+  @apply outline-none pb-20;
   word-wrap: break-word;
   white-space: pre-wrap;
   white-space: break-spaces;
@@ -115,4 +115,10 @@ html, body, #root {
   content: attr(data-placeholder);
   @apply float-left pointer-events-none h-0;
   color: var(--color-text-muted);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
