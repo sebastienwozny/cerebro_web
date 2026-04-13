@@ -339,7 +339,7 @@ function NoteCard({
         </div>
 
         {/* Resize handles — image cards only */}
-        {isImageCard && t < 0.1 && !isDragging && (isHovered || isSelected) && (() => {
+        {isImageCard && t < 0.1 && !isDragging && isHovered && !isSelected && (() => {
           const cornerRef = Math.min(cardW, cardH);
           const cornerSize = Math.max(Math.round(cornerRef * 0.125), 70);
           const cornerInset = 15;
