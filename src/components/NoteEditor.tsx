@@ -126,10 +126,19 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
     const handleOverlayClick = (e: Event) => {
       const me = e as MouseEvent;
       const tiptap = editor.view.dom;
+      const tiptapRect = tiptap.getBoundingClientRect();
+
+      // Click in left/right margins — clear selection
+      if (me.clientX < tiptapRect.left || me.clientX > tiptapRect.right) {
+        editor.commands.blur();
+        setHasSelection(false);
+        return;
+      }
+
       const lastChild = tiptap.lastElementChild as HTMLElement | null;
       const contentBottom = lastChild
         ? lastChild.getBoundingClientRect().bottom
-        : tiptap.getBoundingClientRect().top;
+        : tiptapRect.top;
       if (me.clientY <= contentBottom) return;
       const sampleP = tiptap.querySelector("p");
       const lineH = sampleP
@@ -199,7 +208,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       {/* Floating format toolbar */}
       {editable && (
         <div
-          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10002 transition-all duration-300 ${hasSelection ? "bottom-10 opacity-100" : "-bottom-24 opacity-0"}`}
+          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10002 transition-all duration-500 ease-[cubic-bezier(0.65,0,0.35,1)] ${hasSelection ? "bottom-10 scale-100" : "-bottom-24 scale-90"}`}
           style={{ background: "#1a1c1e", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
         >
           {[
