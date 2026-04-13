@@ -113,7 +113,7 @@ function NoteCard({
   const handleStrokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
 
   const { w: cardW, h: cardH } = getCardSize(note);
-  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.125, 80);
+  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
   // Base (unscaled) size — used as the animation target for open/close
   const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
@@ -341,7 +341,7 @@ function NoteCard({
         {/* Resize handles — image cards only */}
         {isImageCard && t < 0.1 && !isDragging && isHovered && !isSelected && (() => {
           const cornerRef = Math.min(cardW, cardH);
-          const cornerSize = Math.max(Math.round(cornerRef * 0.125), 70);
+          const cornerSize = Math.max(Math.round(cornerRef * 0.10), 70);
           const cornerInset = 15;
           const strokeW = 8;
           return (
