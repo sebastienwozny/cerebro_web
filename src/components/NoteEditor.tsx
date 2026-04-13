@@ -5,7 +5,9 @@ import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
-import { useEffect, useRef } from "react";
+import Underline from "@tiptap/extension-underline";
+import { useEffect, useRef, useState } from "react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -22,6 +24,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
   const initialHtml = useRef(blocksToHtml(blocks));
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const slashIdxRef = useRef(0);
+  const [hasSelection, setHasSelection] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -39,12 +42,16 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       TaskList,
       TaskItem.configure({ nested: false }),
       Image,
+      Underline,
     ],
     content: initialHtml.current,
     editable,
     onUpdate: ({ editor }) => {
       onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>));
       hideSlashMenu();
+    },
+    onSelectionUpdate: ({ editor }) => {
+      setHasSelection(!editor.state.selection.empty);
     },
     editorProps: {
       scrollThreshold: 0,
@@ -189,6 +196,44 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
           </div>
         ))}
       </div>
+      {/* Floating format toolbar */}
+      {editable && (
+        <div
+          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10002 transition-all duration-300 ${hasSelection ? "bottom-10 opacity-100" : "-bottom-24 opacity-0"}`}
+          style={{ background: "#1a1c1e", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+        >
+          {[
+            { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
+            { icon: Italic, label: "Italic", cmd: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic"), shortcut: "⌘I" },
+            { icon: UnderlineIcon, label: "Underline", cmd: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline"), shortcut: "⌘U" },
+            { icon: Strikethrough, label: "Strikethrough", cmd: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike"), shortcut: "⌘⇧X" },
+          ].map(({ icon: Icon, label, cmd, active, shortcut }, i) => (
+            <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108">
+              <button
+                onMouseDown={(e) => { e.preventDefault(); cmd(); }}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none transition-colors duration-150 ${active ? "text-white bg-[#333] dark:bg-neutral-800" : "text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800"}`}
+              >
+                <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
+              </button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8 flex items-center gap-2">
+                <span>{label}</span>
+                <span className="text-white/60">{shortcut}</span>
+              </div>
+            </div>
+          ))}
+          <div className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110">
+            <button
+              onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
+              className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
+            >
+              <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
+            </button>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8">
+              Clear
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
