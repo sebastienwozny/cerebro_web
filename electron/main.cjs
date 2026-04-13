@@ -4,12 +4,9 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 const { app, BrowserWindow, screen } = require("electron");
 const path = require("path");
 
-// GPU & rendering performance flags
+// GPU rendering flags
 app.commandLine.appendSwitch("enable-gpu-rasterization");
-app.commandLine.appendSwitch("enable-zero-copy");
 app.commandLine.appendSwitch("ignore-gpu-blocklist");
-app.commandLine.appendSwitch("enable-features", "CanvasOopRasterization,Metal");
-app.commandLine.appendSwitch("disable-frame-rate-limit");
 
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;

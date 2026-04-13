@@ -132,9 +132,4 @@ html, body, #root {
   to { opacity: 1; }
 }
 
-/* GPU-accelerate animated elements */
-[data-notecard] > div {
-  will-change: transform, opacity;
-  transform: translateZ(0);
-}
 

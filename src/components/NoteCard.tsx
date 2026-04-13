@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
 import { CARD_CONTENT_W, CARD_RADIUS } from "../constants";
@@ -70,6 +71,7 @@ function NoteCard({
   }, [isDragging]);
 
 
+
   // Suppress scale after drag — re-enable when drag ends or selection changes
   const wasDraggedRef = useRef(false);
   useEffect(() => {
@@ -82,6 +84,19 @@ function NoteCard({
 
   const isImageCard = note.kind === "image";
   const { w: cardW, h: cardH } = getCardSize(note);
+
+  // Hero animation for image card close: capture image screen rect before overlay unmounts
+  const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  useLayoutEffect(() => {
+    if (isImageCard && isClosing && !closingImgRect.current) {
+      const img = document.querySelector(".note-editor-header-image img") as HTMLElement | null;
+      if (img) {
+        const r = img.getBoundingClientRect();
+        closingImgRect.current = { x: r.left, y: r.top, w: r.width, h: r.height };
+      }
+    }
+    if (!isClosing) closingImgRect.current = null;
+  }, [isImageCard, isClosing]);
 
   const t = openProgress;
 
@@ -163,20 +178,19 @@ function NoteCard({
             transformOrigin: "top left",
           }}
         >
-          {/* Card background */}
-          {(!isImageCard || t > 0) && (
+          {/* Card background — skip for image cards */}
+          {!isImageCard && (
             <div
               className="absolute inset-0"
               style={{
                 borderRadius: CARD_RADIUS * (1 - t),
                 background: `color-mix(in srgb, var(--color-card) ${Math.round((1 - t) * 100)}%, var(--color-card-open))`,
-                opacity: isImageCard ? t : 1,
               }}
             />
           )}
 
           {/* Image card thumbnail — visible at rest & during transition, hidden when fully open */}
-          {isImageCard && note.imageDataUrl && !editing && (() => {
+          {isImageCard && note.imageDataUrl && !editing && !closingImgRect.current && (() => {
             const imgW = t > 0 ? lerp(cardW, CARD_CONTENT_W, t) : cardW;
             const imgH = imgW * note.imageAspect;
             return (
@@ -278,6 +292,27 @@ function NoteCard({
             {children}
           </div>
         </div>
+      )}
+
+      {/* Hero image for image card close transition — portal so it's not clipped */}
+      {isImageCard && isClosing && t > 0 && closingImgRect.current && note.imageDataUrl && createPortal(
+        <img
+          src={note.imageDataUrl}
+          alt=""
+          style={{
+            position: "fixed",
+            left: lerp(cardScreenLeft, closingImgRect.current.x, t),
+            top: lerp(cardScreenTop, closingImgRect.current.y, t),
+            width: lerp(cardW * scale, closingImgRect.current.w, t),
+            height: lerp(cardH * scale, closingImgRect.current.h, t),
+            objectFit: "cover",
+            zIndex: 10001,
+            pointerEvents: "none",
+            borderRadius: lerp(CARD_RADIUS * scale, 0, t),
+          }}
+          draggable={false}
+        />,
+        document.body,
       )}
     </>
   );

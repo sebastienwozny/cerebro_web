@@ -1,4 +1,4 @@
-import { CARD_W, CARD_H, CARD_CONTENT_W } from "../constants";
+import { CARD_W, CARD_H } from "../constants";
 import type { Note } from "../store/db";
 
 export function getCardSize(note: Pick<Note, "kind" | "imageAspect">) {
