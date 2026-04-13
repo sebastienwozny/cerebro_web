@@ -1,5 +1,6 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { DOMParser } from "@tiptap/pm/model";
+import { createPortal } from "react-dom";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
@@ -112,11 +113,11 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
   useEffect(() => {
     if (editor) {
       editor.setEditable(editable);
-      if (editable) {
+      if (editable && !headerImageUrl) {
         editor.chain().focus("start").run();
       }
     }
-  }, [editor, editable]);
+  }, [editor, editable, headerImageUrl]);
 
   // Click below content to insert empty lines
   useEffect(() => {
@@ -178,7 +179,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
   return (
     <div className="note-editor">
       {headerImageUrl && (
-        <div className="note-editor-header-image">
+        <div className="note-editor-header-image" style={{ marginBottom: 24 }}>
           <img src={headerImageUrl} alt="" />
         </div>
       )}
@@ -205,11 +206,11 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
           </div>
         ))}
       </div>
-      {/* Floating format toolbar */}
-      {editable && (
+      {/* Floating format toolbar — rendered via portal so fixed positioning works */}
+      {editable && createPortal(
         <div
-          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10002 transition-all duration-300 ${hasSelection ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80"}`}
-          style={{ background: "#1a1c1e", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${hasSelection ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80"}`}
+          style={{ zIndex: 10002, background: "#1a1c1e", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
         >
           {[
             { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
@@ -241,7 +242,8 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
               Clear
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

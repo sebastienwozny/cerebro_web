@@ -30,6 +30,30 @@ export function useNotes() {
     return note;
   }
 
+  async function addImageNote(
+    x: number,
+    y: number,
+    imageDataUrl: string,
+    imageAspect: number,
+    id?: string,
+  ): Promise<Note> {
+    const maxZ = getMaxZ(notes);
+    const note: Note = {
+      id: id ?? uuid(),
+      kind: "image",
+      title: "",
+      blocks: [makeBlock("text")],
+      imageDataUrl,
+      imageAspect,
+      positionX: x,
+      positionY: y,
+      zOrder: maxZ + 1,
+      createdAt: new Date(),
+    };
+    await db.notes.add(note);
+    return note;
+  }
+
   async function updateNote(id: string, changes: Partial<Note>) {
     await db.notes.update(id, changes);
   }
@@ -55,5 +79,5 @@ export function useNotes() {
     await db.notes.update(id, { zOrder: maxZ + 1 });
   }
 
-  return { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront };
+  return { notes, addNote, addImageNote, updateNote, deleteNote, duplicateNote, bringToFront };
 }

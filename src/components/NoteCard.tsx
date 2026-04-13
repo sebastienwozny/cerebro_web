@@ -164,15 +164,37 @@ function NoteCard({
           }}
         >
           {/* Card background */}
-          {!isImageCard && (
+          {(!isImageCard || t > 0) && (
             <div
               className="absolute inset-0"
               style={{
                 borderRadius: CARD_RADIUS * (1 - t),
                 background: `color-mix(in srgb, var(--color-card) ${Math.round((1 - t) * 100)}%, var(--color-card-open))`,
+                opacity: isImageCard ? t : 1,
               }}
             />
           )}
+
+          {/* Image card thumbnail — visible at rest & during transition, hidden when fully open */}
+          {isImageCard && note.imageDataUrl && !editing && (() => {
+            const imgW = t > 0 ? lerp(cardW, CARD_CONTENT_W, t) : cardW;
+            const imgH = imgW * note.imageAspect;
+            return (
+              <img
+                src={note.imageDataUrl}
+                alt=""
+                className="absolute pointer-events-none"
+                style={{
+                  top: t > 0 ? 120 * t : 0,
+                  left: (cardW - imgW) / 2,
+                  width: imgW,
+                  height: imgH,
+                  objectFit: "cover",
+                }}
+                draggable={false}
+              />
+            );
+          })()}
 
           {/* Selection border — white inside */}
           <div
@@ -186,24 +208,13 @@ function NoteCard({
             }}
           />
 
-          {/* Image card thumbnail */}
-          {isImageCard && note.imageDataUrl && openProgress < 0.01 && (
-            <img
-              src={note.imageDataUrl}
-              alt=""
-              className="absolute top-0 left-0 object-cover pointer-events-none"
-              style={{ width: cardW, height: cardH }}
-              draggable={false}
-            />
-          )}
-
-          {/* Editor content (card mode — clipped) */}
-          {!editing && (
+          {/* Editor content (card mode — clipped). Skip for image cards — thumbnail handles it. */}
+          {!editing && !isImageCard && (
             <div
               className="absolute inset-0 flex justify-center"
               style={{
                 pointerEvents: "none",
-                paddingTop: 150,
+                paddingTop: 120,
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
               }}
             >
@@ -257,7 +268,7 @@ function NoteCard({
           className="fixed inset-0 overflow-y-auto flex justify-center"
           style={{
             zIndex: 10000,
-            paddingTop: 150,
+            paddingTop: 120,
             paddingBottom: 40,
             paddingLeft: 20,
             paddingRight: 20,

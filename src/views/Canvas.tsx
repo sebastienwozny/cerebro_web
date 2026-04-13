@@ -10,6 +10,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import { DELETE_DURATION } from "../constants";
 import { getCardSize } from "../lib/cardDimensions";
+import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 import NotePreview from "../components/NotePreview";
@@ -19,7 +20,7 @@ const ZERO_DELTA = { dx: 0, dy: 0 };
 const NOOP_ID = (_id: string) => {};
 
 export default function Canvas() {
-  const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
+  const { notes, addNote, addImageNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
   const { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
   void transformVersion;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -176,6 +177,51 @@ export default function Canvas() {
     },
     [addNote, canvasLocked, getTransform, windowSize, triggerPop]
   );
+
+  // ── Image drop & file input ──
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (canvasLocked) return;
+    if (hasImageFile(e.dataTransfer)) {
+      e.preventDefault();
+      setIsDragOver(true);
+    }
+  }, [canvasLocked]);
+
+  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    setIsDragOver(false);
+    if (canvasLocked) return;
+    const file = getImageFile(e.dataTransfer);
+    if (!file) return;
+    e.preventDefault();
+    const t = getTransform();
+    const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
+    const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
+    const { dataUrl, aspect } = await readImageFile(file);
+    const noteId = crypto.randomUUID();
+    triggerPop([noteId]);
+    undoStack.record({ type: "create", noteIds: [noteId] });
+    await addImageNote(canvasX, canvasY, dataUrl, aspect, noteId);
+  }, [canvasLocked, getTransform, windowSize, triggerPop, addImageNote]);
+
+  const handleImageInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    const t = getTransform();
+    const spread = 40;
+    const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+    const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+    const { dataUrl, aspect } = await readImageFile(file);
+    const noteId = crypto.randomUUID();
+    triggerPop([noteId]);
+    undoStack.record({ type: "create", noteIds: [noteId] });
+    await addImageNote(canvasX, canvasY, dataUrl, aspect, noteId);
+  }, [getTransform, triggerPop, addImageNote]);
 
   const handleCardTap = useCallback(
     (noteId: string) => { clearSelection(); openNote(noteId); },
@@ -364,7 +410,23 @@ export default function Canvas() {
       onPointerDown={handleCanvasPointerDown}
       onPointerMove={spacePanMove}
       onPointerUp={spacePanUp}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
+      {/* Drag-over indicator */}
+      {isDragOver && (
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "rgba(74, 158, 255, 0.06)",
+            border: "3px dashed rgba(74, 158, 255, 0.4)",
+            borderRadius: 12,
+            zIndex: 9997,
+          }}
+        />
+      )}
+
       {/* White overlay */}
       {openProgress > 0 && (
         <div
@@ -507,30 +569,55 @@ export default function Canvas() {
         />
       )}
 
-      {/* Add note button */}
+      {/* Add note / image buttons */}
       {!canvasLocked && (
-        <button
-          className="fixed bottom-6 right-6 w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none"
-          style={{
-            background: "var(--color-card)",
-            color: "var(--color-text-muted)",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            zIndex: 100,
-          }}
-          onDoubleClick={(e) => e.stopPropagation()}
-          onClick={async () => {
-            const t = getTransform();
-            const spread = 40;
-            const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
-            const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
-            const noteId = crypto.randomUUID();
-            triggerPop([noteId]);
-            undoStack.record({ type: "create", noteIds: [noteId] });
-            await addNote(canvasX, canvasY, noteId);
-          }}
-        >
-          +
-        </button>
+        <div className="fixed bottom-6 right-6 flex gap-2" style={{ zIndex: 100 }}>
+          <input
+            ref={imageInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageInput}
+          />
+          <button
+            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none"
+            style={{
+              background: "var(--color-card)",
+              color: "var(--color-text-muted)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            }}
+            title="Add image"
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={() => imageInputRef.current?.click()}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+              <circle cx="8.5" cy="8.5" r="1.5" />
+              <polyline points="21 15 16 10 5 21" />
+            </svg>
+          </button>
+          <button
+            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none"
+            style={{
+              background: "var(--color-card)",
+              color: "var(--color-text-muted)",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            }}
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={async () => {
+              const t = getTransform();
+              const spread = 40;
+              const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+              const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+              const noteId = crypto.randomUUID();
+              triggerPop([noteId]);
+              undoStack.record({ type: "create", noteIds: [noteId] });
+              await addNote(canvasX, canvasY, noteId);
+            }}
+          >
+            +
+          </button>
+        </div>
       )}
 
       {/* Empty state */}

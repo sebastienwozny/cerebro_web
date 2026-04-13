@@ -3,7 +3,8 @@ import type { Note } from "../store/db";
 
 export function getCardSize(note: Pick<Note, "kind" | "imageAspect">) {
   const isImage = note.kind === "image";
-  const w = isImage ? CARD_CONTENT_W : CARD_W;
-  const h = isImage && note.imageAspect > 0 ? CARD_CONTENT_W * note.imageAspect : CARD_H;
+  const IMAGE_CARD_W = 1200;
+  const w = isImage ? IMAGE_CARD_W : CARD_W;
+  const h = isImage && note.imageAspect > 0 ? IMAGE_CARD_W * note.imageAspect : CARD_H;
   return { w, h };
 }
