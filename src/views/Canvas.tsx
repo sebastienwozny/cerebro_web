@@ -388,6 +388,13 @@ export default function Canvas() {
     }
   }, []);
 
+  const handleResize = useCallback(
+    (noteId: string, newScale: number) => {
+      updateNote(noteId, { cardScale: newScale });
+    },
+    [updateNote]
+  );
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
       spacePanDown(e);
@@ -501,6 +508,7 @@ export default function Canvas() {
                 onDragRotation={handleDragRotation}
                 onDragDuplicate={handleDragDuplicate}
                 onBringToFront={bringToFront}
+                onResize={handleResize}
               >
                 <NotePreview
                   blocks={note.blocks}

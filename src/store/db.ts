@@ -31,6 +31,7 @@ export interface Note {
   blocks: NoteBlock[];
   imageDataUrl?: string; // base64 data URL for image cards
   imageAspect: number; // height / width
+  cardScale: number; // resize factor (default 1)
   positionX: number;
   positionY: number;
   zOrder: number;
@@ -46,6 +47,15 @@ class CerebroDB extends Dexie {
     super("cerebro");
     this.version(1).stores({
       notes: "id, zOrder, createdAt",
+    });
+    this.version(2).stores({
+      notes: "id, zOrder, createdAt",
+    }).upgrade(tx => {
+      return tx.table("notes").toCollection().modify(note => {
+        if (note.cardScale === undefined || note.kind === "note") {
+          note.cardScale = 1;
+        }
+      });
     });
   }
 }

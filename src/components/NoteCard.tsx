@@ -32,6 +32,7 @@ interface Props {
   onDragRotation?: (rotation: number) => void;
   onDragDuplicate?: (noteId: string) => void;
   onBringToFront: (noteId: string) => void;
+  onResize?: (noteId: string, newScale: number) => void;
   children?: React.ReactNode;
 }
 
@@ -42,7 +43,7 @@ function lerp(a: number, b: number, t: number) {
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
-  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
+  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize,
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
@@ -84,6 +85,31 @@ function NoteCard({
 
   const isImageCard = note.kind === "image";
   const { w: cardW, h: cardH } = getCardSize(note);
+  // Base (unscaled) size — used as the animation target for open/close
+  const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
+
+  // ── Resize handle logic ──
+  const resizingRef = useRef(false);
+  const resizeStartRef = useRef({ pointerX: 0, startScale: 1, direction: 1 });
+
+  const makeResizeHandlers = (direction: 1 | -1) => ({
+    onPointerDown: (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      resizingRef.current = true;
+      resizeStartRef.current = { pointerX: e.clientX, startScale: note.cardScale || 1, direction };
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    },
+    onPointerMove: (e: React.PointerEvent) => {
+      if (!resizingRef.current) return;
+      const dx = (e.clientX - resizeStartRef.current.pointerX) * resizeStartRef.current.direction;
+      const newScale = Math.max(0.3, resizeStartRef.current.startScale + dx / (cardW / (note.cardScale || 1)) / scale);
+      onResize?.(note.id, newScale);
+    },
+    onPointerUp: () => {
+      resizingRef.current = false;
+    },
+  });
 
   // Hero animation for image card close: capture image screen rect before overlay unmounts
   const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -103,7 +129,7 @@ function NoteCard({
   const canvasLeft = note.positionX - cardW / 2 + groupDragDelta.dx;
   const canvasTop = note.positionY - cardH / 2 + groupDragDelta.dy;
 
-  const screenLeft = (windowW - cardW) / 2;
+  const screenLeft = (windowW - baseW) / 2;
   const screenTop = 0;
   const cardScreenLeft = windowW / 2 + note.positionX * scale + offsetX - (cardW * scale) / 2;
   const cardScreenTop = windowH / 2 + note.positionY * scale + offsetY - (cardH * scale) / 2;
@@ -111,10 +137,12 @@ function NoteCard({
   const scl = t > 0 ? lerp(scale, 1, t) : 1;
   const visualLeft = t > 0 ? lerp(cardScreenLeft, screenLeft, t) : canvasLeft;
   const visualTop = t > 0 ? lerp(cardScreenTop, screenTop, t) : canvasTop;
-  // Expand height toward viewport so content doesn't pop when the editor overlay appears
-  const visualHeight = t > 0 ? lerp(cardH * scale, Math.max(cardH, windowH), t) : cardH;
+  const visualWidth = t > 0 ? cardW * scl : cardW;
+  const visualHeight = t > 0 ? lerp(cardH * scale, Math.max(baseH, windowH), t) : cardH;
+  const innerW = t > 0 ? cardW : cardW;
   const innerH = t > 0 ? visualHeight / scl : cardH;
   const editing = openProgress >= 1;
+
 
   const closingScrollY = !editing && openProgress > 0 && closingScrollOffset > 0
     ? -closingScrollOffset * openProgress
@@ -129,50 +157,57 @@ function NoteCard({
       <div
         className="absolute select-none pointer-events-auto"
         style={{
-          contain: "layout style paint",
           left: visualLeft,
           top: visualTop,
-          width: t > 0 ? cardW * scl : cardW,
+          width: visualWidth,
           height: t > 0 ? visualHeight : cardH,
-          borderRadius: t > 0 ? CARD_RADIUS * scl * (1 - t) : CARD_RADIUS,
-          overflow: "hidden",
-          cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
           zIndex: openProgress > 0 ? 9999 : note.zOrder,
           transform: isDeleting
             ? "scale(0)"
             : isDragging || isFollowing
                 ? `rotate(${rotation}deg)`
-                : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
-                  ? "scale(1.02)"
-                  : t > 0 && t < 0.15 && !isClosing
-                    ? `scale(${lerp(1.02, 1, t / 0.15)})`
+                : t > 0
+                  ? "none"
+                  : (isSelected || isHovered) && !wasDraggedRef.current
+                    ? "scale(1.02)"
                     : "none",
-          opacity: 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
             ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
             : isDragging || isFollowing
               ? "opacity 0.3s ease-out"
-              : isAnimating
-                ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out, box-shadow 0.15s ease-out"
-                : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
-          boxShadow: t > 0
-            ? "none"
-            : isSelected && openProgress < 0.1
-              ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
-              : isHovered
-                ? "0 20px 40px rgba(0,0,0,0.05)"
-                : "0 4px 10px rgba(0,0,0,0.05)",
+              : t > 0
+                ? "none"
+                : isAnimating
+                  ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out, box-shadow 0.15s ease-out"
+                  : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
         }}
-        onPointerDown={handlePointerDown}
         onMouseEnter={() => !isOpen && !hoverSuppressed && !isPopping && t < 0.1 && setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
+        {/* Clipped card content */}
+        <div
+          className="absolute inset-0"
+          style={{
+            contain: "layout style paint",
+            borderRadius: t > 0 ? CARD_RADIUS * scl * (1 - t) : CARD_RADIUS,
+            overflow: "hidden",
+            cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
+            boxShadow: t > 0
+              ? "none"
+              : isSelected && openProgress < 0.1
+                ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
+                : isHovered
+                  ? "0 20px 40px rgba(0,0,0,0.05)"
+                  : "0 4px 10px rgba(0,0,0,0.05)",
+          }}
+          onPointerDown={handlePointerDown}
+        >
         {/* Inner wrapper */}
         <div
           style={{
-            width: cardW,
+            width: innerW,
             height: t > 0 ? innerH : cardH,
             transform: t > 0 ? `scale(${scl})` : "none",
             transformOrigin: "top left",
@@ -189,26 +224,22 @@ function NoteCard({
             />
           )}
 
-          {/* Image card thumbnail — visible at rest & during transition, hidden when fully open */}
-          {isImageCard && note.imageDataUrl && !editing && !closingImgRect.current && (() => {
-            const imgW = t > 0 ? lerp(cardW, CARD_CONTENT_W, t) : cardW;
-            const imgH = imgW * note.imageAspect;
-            return (
-              <img
-                src={note.imageDataUrl}
-                alt=""
-                className="absolute pointer-events-none"
-                style={{
-                  top: t > 0 ? 120 * t : 0,
-                  left: (cardW - imgW) / 2,
-                  width: imgW,
-                  height: imgH,
-                  objectFit: "cover",
-                }}
-                draggable={false}
-              />
-            );
-          })()}
+          {/* Image card thumbnail — visible only at rest (t=0), hidden during open/close transitions */}
+          {isImageCard && note.imageDataUrl && t === 0 && (
+            <img
+              src={note.imageDataUrl}
+              alt=""
+              className="absolute pointer-events-none"
+              style={{
+                top: 0,
+                left: 0,
+                width: cardW,
+                height: cardH,
+                objectFit: "cover",
+              }}
+              draggable={false}
+            />
+          )}
 
           {/* Selection border — white inside */}
           <div
@@ -250,7 +281,52 @@ function NoteCard({
               }}
             />
           )}
+
         </div>
+        {/* Close clipped card content */}
+        </div>
+
+        {/* Resize handles (left & right center) — image cards only */}
+        {isImageCard && t < 0.1 && !isDragging && (isHovered || isSelected) && (
+          <>
+            {/* Left handle */}
+            <div
+              className="absolute pointer-events-auto"
+              style={{
+                left: 0,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 48,
+                height: 200,
+                cursor: "ew-resize",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              {...makeResizeHandlers(-1)}
+            >
+              <div style={{ width: 8, height: cardH * 0.15, borderRadius: 4, background: "rgba(255,255,255,0.7)", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            </div>
+            {/* Right handle */}
+            <div
+              className="absolute pointer-events-auto"
+              style={{
+                right: 0,
+                top: "50%",
+                transform: "translateY(-50%)",
+                width: 48,
+                height: 200,
+                cursor: "ew-resize",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              {...makeResizeHandlers(1)}
+            >
+              <div style={{ width: 8, height: cardH * 0.15, borderRadius: 4, background: "rgba(255,255,255,0.7)", boxShadow: "0 0 4px rgba(0,0,0,0.5)" }} />
+            </div>
+          </>
+        )}
       </div>
 
       {/* Back button */}
@@ -274,6 +350,7 @@ function NoteCard({
         </button>
       )}
 
+
       {/* Editor content (open mode) */}
       {editing && (
         <div
@@ -294,26 +371,40 @@ function NoteCard({
         </div>
       )}
 
-      {/* Hero image for image card close transition — portal so it's not clipped */}
-      {isImageCard && isClosing && t > 0 && closingImgRect.current && note.imageDataUrl && createPortal(
-        <img
-          src={note.imageDataUrl}
-          alt=""
-          style={{
-            position: "fixed",
-            left: lerp(cardScreenLeft, closingImgRect.current.x, t),
-            top: lerp(cardScreenTop, closingImgRect.current.y, t),
-            width: lerp(cardW * scale, closingImgRect.current.w, t),
-            height: lerp(cardH * scale, closingImgRect.current.h, t),
-            objectFit: "cover",
-            zIndex: 10001,
-            pointerEvents: "none",
-            borderRadius: lerp(CARD_RADIUS * scale, 0, t),
-          }}
-          draggable={false}
-        />,
-        document.body,
-      )}
+      {/* Hero image for image card open/close transition — portal so it's not clipped */}
+      {isImageCard && t > 0 && !editing && note.imageDataUrl && (() => {
+        // Editor image target rect (centered, below 120px header)
+        const editorImgW = CARD_CONTENT_W;
+        const editorImgH = CARD_CONTENT_W * note.imageAspect;
+        const editorImgX = (windowW - editorImgW) / 2;
+        const editorImgY = 120;
+
+        // Use captured rect for close (more accurate), computed rect for open
+        const targetX = isClosing && closingImgRect.current ? closingImgRect.current.x : editorImgX;
+        const targetY = isClosing && closingImgRect.current ? closingImgRect.current.y : editorImgY;
+        const targetW = isClosing && closingImgRect.current ? closingImgRect.current.w : editorImgW;
+        const targetH = isClosing && closingImgRect.current ? closingImgRect.current.h : editorImgH;
+
+        return createPortal(
+          <img
+            src={note.imageDataUrl}
+            alt=""
+            style={{
+              position: "fixed",
+              left: lerp(cardScreenLeft, targetX, t),
+              top: lerp(cardScreenTop, targetY, t),
+              width: lerp(cardW * scale, targetW, t),
+              height: lerp(cardH * scale, targetH, t),
+              objectFit: "cover",
+              zIndex: 10001,
+              pointerEvents: "none",
+              borderRadius: lerp(CARD_RADIUS * scale, 0, t),
+            }}
+            draggable={false}
+          />,
+          document.body,
+        );
+      })()}
     </>
   );
 }

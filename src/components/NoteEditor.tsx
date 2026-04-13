@@ -180,7 +180,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
     <div className="note-editor">
       {headerImageUrl && (
         <div className="note-editor-header-image" style={{ marginBottom: 24 }}>
-          <img src={headerImageUrl} alt="" />
+          <img src={headerImageUrl} alt="" style={{ width: "100%", display: "block" }} />
         </div>
       )}
       <EditorContent editor={editor} />
