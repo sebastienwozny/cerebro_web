@@ -4,6 +4,13 @@ delete process.env.ELECTRON_RUN_AS_NODE;
 const { app, BrowserWindow, screen } = require("electron");
 const path = require("path");
 
+// GPU & rendering performance flags
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+app.commandLine.appendSwitch("enable-zero-copy");
+app.commandLine.appendSwitch("ignore-gpu-blocklist");
+app.commandLine.appendSwitch("enable-features", "CanvasOopRasterization,Metal");
+app.commandLine.appendSwitch("disable-frame-rate-limit");
+
 function createWindow() {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
 
@@ -12,10 +19,12 @@ function createWindow() {
     height,
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 18 },
+    paintWhenInitiallyHidden: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
       scrollBounce: true,
+      backgroundThrottling: false,
     },
   });
 
