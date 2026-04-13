@@ -25,7 +25,7 @@ export default function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
 
-  const { openNoteId, openProgress, closingScrollOffset, openTransform, openNote, closeNote } =
+  const { openNoteId, openProgress, isClosing, closingScrollOffset, openTransform, openNote, closeNote } =
     useOpenClose(bringToFront, getTransform);
 
   const canvasLocked = openNoteId !== null;
@@ -42,7 +42,7 @@ export default function Canvas() {
   // Delete animation state
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
   const [popIds, setPopIds] = useState<Set<string>>(new Set());
-  const popTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const popTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const triggerPop = useCallback((ids: string[]) => {
     setPopIds(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next; });
     clearTimeout(popTimerRef.current);
@@ -464,6 +464,7 @@ export default function Canvas() {
             isSelected={false}
             isDeleting={false}
             openProgress={openProgress}
+            isClosing={isClosing}
             closingScrollOffset={closingScrollOffset}
             hoverSuppressed={false}
             groupDragDelta={{ dx: 0, dy: 0 }}

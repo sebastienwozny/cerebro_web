@@ -17,6 +17,7 @@ interface Props {
   isPopping?: boolean;
   isAnimating?: boolean;
   openProgress: number;
+  isClosing?: boolean;
   closingScrollOffset: number;
   hoverSuppressed: boolean;
   groupDragDelta: { dx: number; dy: number };
@@ -39,7 +40,7 @@ function lerp(a: number, b: number, t: number) {
 
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront,
   children,
 }: Props) {
@@ -95,6 +96,9 @@ function NoteCard({
   const scl = t > 0 ? lerp(scale, 1, t) : 1;
   const visualLeft = t > 0 ? lerp(cardScreenLeft, screenLeft, t) : canvasLeft;
   const visualTop = t > 0 ? lerp(cardScreenTop, screenTop, t) : canvasTop;
+  // Expand height toward viewport so content doesn't pop when the editor overlay appears
+  const visualHeight = t > 0 ? lerp(cardH * scale, Math.max(cardH, windowH), t) : cardH;
+  const innerH = t > 0 ? visualHeight / scl : cardH;
   const editing = openProgress >= 1;
 
   const closingScrollY = !editing && openProgress > 0 && closingScrollOffset > 0
@@ -114,7 +118,7 @@ function NoteCard({
           left: visualLeft,
           top: visualTop,
           width: t > 0 ? cardW * scl : cardW,
-          height: t > 0 ? cardH * scl : cardH,
+          height: t > 0 ? visualHeight : cardH,
           borderRadius: t > 0 ? CARD_RADIUS * scl * (1 - t) : CARD_RADIUS,
           overflow: "hidden",
           cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
@@ -125,7 +129,9 @@ function NoteCard({
                 ? `rotate(${rotation}deg)`
                 : (isSelected || isHovered) && !wasDraggedRef.current && t < 0.1
                   ? "scale(1.02)"
-                  : "none",
+                  : t > 0 && t < 0.15 && !isClosing
+                    ? `scale(${lerp(1.02, 1, t / 0.15)})`
+                    : "none",
           opacity: 1,
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
@@ -152,7 +158,7 @@ function NoteCard({
         <div
           style={{
             width: cardW,
-            height: cardH,
+            height: t > 0 ? innerH : cardH,
             transform: t > 0 ? `scale(${scl})` : "none",
             transformOrigin: "top left",
           }}

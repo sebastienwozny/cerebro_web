@@ -9,6 +9,7 @@ export function useOpenClose(
 ) {
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [openProgress, setOpenProgress] = useState(0);
+  const [isClosing, setIsClosing] = useState(false);
   const [closingScrollOffset, setClosingScrollOffset] = useState(0);
   const [openTransform, setOpenTransform] = useState({ offsetX: 0, offsetY: 0, scale: 0.5 });
   const progressRef = useRef({ value: 0 });
@@ -19,6 +20,7 @@ export function useOpenClose(
       bringToFront(id);
       setOpenTransform({ ...getTransform() });
       setOpenNoteId(id);
+      setIsClosing(false);
       tweenRef.current?.kill();
       tweenRef.current = gsap.to(progressRef.current, {
         value: 1,
@@ -33,6 +35,7 @@ export function useOpenClose(
   const closeNote = useCallback(() => {
     const scrollEl = document.querySelector("[data-editor-overlay]") as HTMLElement | null;
     setClosingScrollOffset(scrollEl?.scrollTop ?? 0);
+    setIsClosing(true);
     tweenRef.current?.kill();
     tweenRef.current = gsap.to(progressRef.current, {
       value: 0,
@@ -48,5 +51,5 @@ export function useOpenClose(
     });
   }, []);
 
-  return { openNoteId, openProgress, closingScrollOffset, openTransform, openNote, closeNote };
+  return { openNoteId, openProgress, isClosing, closingScrollOffset, openTransform, openNote, closeNote };
 }
