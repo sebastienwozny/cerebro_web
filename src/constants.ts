@@ -16,6 +16,6 @@ export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 3;
 
 // Canvas interaction tuning
-export const ZOOM_SENSITIVITY = 0.988;
+export const ZOOM_SENSITIVITY = 0.995;
 export const PAN_MULTIPLIER = 1.3;
 export const DRAG_LERP_FACTOR = 0.35;
