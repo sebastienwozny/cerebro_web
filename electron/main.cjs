@@ -1,7 +1,11 @@
+// Ensure Electron runs as a browser, not as Node.js
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const { app, BrowserWindow } = require("electron");
 const path = require("path");
 
 function createWindow() {
+
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,

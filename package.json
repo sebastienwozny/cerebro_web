@@ -3,13 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "env -u ELECTRON_RUN_AS_NODE VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "electron:open": "env -u ELECTRON_RUN_AS_NODE open dist/mac-arm64/Cerebro.app",
     "electron:build": "npm run build && electron-builder"
   },
   "build": {
@@ -17,7 +18,8 @@
     "productName": "Cerebro",
     "mac": {
       "target": "dmg",
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "identity": "-"
     },
     "files": [
       "dist/**/*",
