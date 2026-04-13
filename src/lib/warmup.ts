@@ -8,27 +8,40 @@ import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 
 /**
- * Pre-warm Dexie (IndexedDB) and TipTap (ProseMirror schema compilation)
- * so the first card creation + editor open feel instant.
+ * Pre-warm Dexie (IndexedDB), TipTap (ProseMirror schema compilation),
+ * and GSAP so the first interactions feel instant.
  */
 export function warmup() {
-  // 1. Eagerly open IndexedDB
-  db.open();
+  // Run after first paint so we don't block initial render
+  requestIdleCallback(() => {
+    // 1. Eagerly open IndexedDB
+    db.open();
 
-  // 2. Create a throwaway TipTap editor to compile the ProseMirror schema & plugins
-  const el = document.createElement("div");
-  const editor = new Editor({
-    element: el,
-    extensions: [
-      StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Placeholder,
-      TaskList,
-      TaskItem.configure({ nested: false }),
-      Image,
-      Underline,
-    ],
-    content: "",
+    // 2. Create a throwaway TipTap editor to compile the ProseMirror schema & plugins
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const editor = new Editor({
+      element: el,
+      extensions: [
+        StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+        Placeholder,
+        TaskList,
+        TaskItem.configure({ nested: false }),
+        Image,
+        Underline,
+      ],
+      content: "<p>warm</p>",
+    });
+    // Let the editor fully initialize before destroying
+    requestAnimationFrame(() => {
+      editor.destroy();
+      el.remove();
+    });
+
+    // 3. Pre-warm GSAP by running a throwaway tween
+    import("gsap").then(({ default: gsap }) => {
+      const dummy = { v: 0 };
+      gsap.to(dummy, { v: 1, duration: 0.01 });
+    });
   });
-  // Destroy once schema is compiled — no need to keep it around
-  editor.destroy();
 }
