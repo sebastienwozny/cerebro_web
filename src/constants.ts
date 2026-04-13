@@ -1,7 +1,7 @@
 // Card dimensions (matching Swift constants)
 export const CARD_W = 800;
 export const CARD_H = 1131;
-export const CARD_CONTENT_W = 600;
+export const CARD_CONTENT_W = 650;
 export const CARD_RADIUS = 100;
 
 // Open/close animation durations (seconds)
