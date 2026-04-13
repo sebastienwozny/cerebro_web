@@ -8,6 +8,7 @@ import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
+import gsap from "gsap";
 import { DELETE_DURATION } from "../constants";
 import { getCardSize } from "../lib/cardDimensions";
 import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
@@ -109,6 +110,22 @@ export default function Canvas() {
         });
         // Pop animation on restored cards
         triggerPop(ids);
+        return inverse;
+      }
+      case "resize": {
+        const currentNote = notesRef.current.find(n => n.id === action.noteId);
+        const currentScale = currentNote?.cardScale ?? action.oldScale;
+        const inverse: CanvasAction = { type: "resize", noteId: action.noteId, oldScale: currentScale };
+        const obj = { scale: currentScale };
+        await new Promise<void>(resolve => {
+          gsap.to(obj, {
+            scale: action.oldScale,
+            duration: 0.35,
+            ease: "power2.out",
+            onUpdate: () => db.notes.update(action.noteId, { cardScale: obj.scale }),
+            onComplete: resolve,
+          });
+        });
         return inverse;
       }
       case "create": {
@@ -395,6 +412,13 @@ export default function Canvas() {
     [updateNote]
   );
 
+  const handleResizeEnd = useCallback(
+    (noteId: string, oldScale: number) => {
+      undoStack.record({ type: "resize", noteId, oldScale });
+    },
+    []
+  );
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
       spacePanDown(e);
@@ -509,6 +533,7 @@ export default function Canvas() {
                 onDragDuplicate={handleDragDuplicate}
                 onBringToFront={bringToFront}
                 onResize={handleResize}
+                onResizeEnd={handleResizeEnd}
               >
                 <NotePreview
                   blocks={note.blocks}

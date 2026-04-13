@@ -33,6 +33,7 @@ interface Props {
   onDragDuplicate?: (noteId: string) => void;
   onBringToFront: (noteId: string) => void;
   onResize?: (noteId: string, newScale: number) => void;
+  onResizeEnd?: (noteId: string, oldScale: number) => void;
   children?: React.ReactNode;
 }
 
@@ -43,7 +44,7 @@ function lerp(a: number, b: number, t: number) {
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
-  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize,
+  onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
@@ -107,6 +108,9 @@ function NoteCard({
       onResize?.(note.id, newScale);
     },
     onPointerUp: () => {
+      if (resizingRef.current) {
+        onResizeEnd?.(note.id, resizeStartRef.current.startScale);
+      }
       resizingRef.current = false;
     },
   });
