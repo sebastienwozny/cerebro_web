@@ -24,7 +24,7 @@ export function noteFromSnapshot(snap: NoteSnapshot): Note {
 
 export type CanvasAction =
   | { type: "move"; moves: { noteId: string; oldX: number; oldY: number }[] }
-  | { type: "resize"; noteId: string; oldScale: number }
+  | { type: "resize"; noteId: string; oldScale: number; oldPosX: number; oldPosY: number }
   | { type: "delete"; snapshots: NoteSnapshot[] }
   | { type: "create"; noteIds: string[] }
   | { type: "batch"; actions: CanvasAction[] };

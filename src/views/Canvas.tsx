@@ -115,14 +115,18 @@ export default function Canvas() {
       case "resize": {
         const currentNote = notesRef.current.find(n => n.id === action.noteId);
         const currentScale = currentNote?.cardScale ?? action.oldScale;
-        const inverse: CanvasAction = { type: "resize", noteId: action.noteId, oldScale: currentScale };
-        const obj = { scale: currentScale };
+        const currentPosX = currentNote?.positionX ?? action.oldPosX;
+        const currentPosY = currentNote?.positionY ?? action.oldPosY;
+        const inverse: CanvasAction = { type: "resize", noteId: action.noteId, oldScale: currentScale, oldPosX: currentPosX, oldPosY: currentPosY };
+        const obj = { scale: currentScale, posX: currentPosX, posY: currentPosY };
         await new Promise<void>(resolve => {
           gsap.to(obj, {
             scale: action.oldScale,
+            posX: action.oldPosX,
+            posY: action.oldPosY,
             duration: 0.35,
             ease: "power2.out",
-            onUpdate: () => db.notes.update(action.noteId, { cardScale: obj.scale }),
+            onUpdate: () => db.notes.update(action.noteId, { cardScale: obj.scale, positionX: obj.posX, positionY: obj.posY }),
             onComplete: resolve,
           });
         });
@@ -406,15 +410,15 @@ export default function Canvas() {
   }, []);
 
   const handleResize = useCallback(
-    (noteId: string, newScale: number) => {
-      updateNote(noteId, { cardScale: newScale });
+    (noteId: string, newScale: number, newPosX: number, newPosY: number) => {
+      updateNote(noteId, { cardScale: newScale, positionX: newPosX, positionY: newPosY });
     },
     [updateNote]
   );
 
   const handleResizeEnd = useCallback(
-    (noteId: string, oldScale: number) => {
-      undoStack.record({ type: "resize", noteId, oldScale });
+    (noteId: string, oldScale: number, oldPosX: number, oldPosY: number) => {
+      undoStack.record({ type: "resize", noteId, oldScale, oldPosX, oldPosY });
     },
     []
   );
