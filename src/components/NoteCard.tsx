@@ -144,19 +144,31 @@ function NoteCard({
       resizingRef.current = false;
       setIsResizing(false);
       setIsHovered(false);
+      resizeCaptureRef.current = null;
     };
+    const onBlur = () => { if (resizingRef.current) onUp(); };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
     return () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onBlur);
     };
   });
+
+  const resizeCaptureRef = useRef<Element | null>(null);
 
   const makeResizeHandlers = (dirX: 1 | -1, dirY: -1 | 0 | 1) => ({
     onPointerDown: (e: React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
+      (e.target as Element).setPointerCapture(e.pointerId);
+      resizeCaptureRef.current = e.target as Element;
       resizingRef.current = true;
       setIsResizing(true);
       resizeStartRef.current = { pointerX: e.clientX, startScale: note.cardScale || 1, startPosX: note.positionX, startPosY: note.positionY, dirX, dirY };
@@ -232,8 +244,8 @@ function NoteCard({
               : t > 0
                 ? "none"
                 : isAnimating
-                  ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out, box-shadow 0.15s ease-out"
-                  : "transform 0.15s ease-out, box-shadow 0.15s ease-out",
+                  ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out"
+                  : "transform 0.15s ease-out",
         }}
         onMouseEnter={() => !isOpen && !hoverSuppressed && !isPopping && !isResizing && t < 0.1 && setIsHovered(true)}
         onMouseLeave={() => !isResizing && setIsHovered(false)}
@@ -251,8 +263,9 @@ function NoteCard({
               : isSelected && openProgress < 0.1
                 ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
                 : isHovered
-                  ? "0 20px 40px rgba(0,0,0,0.05)"
-                  : "0 4px 10px rgba(0,0,0,0.05)",
+                  ? "0 20px 50px -10px rgba(0,0,0,0.08), 0 50px 140px -15px rgba(0,0,0,0.06)"
+                  : "0 10px 20px -12px rgba(0,0,0,0.15), 0 32px 40px -8px rgba(0,0,0,0.04)",
+            transition: t > 0 ? "none" : "box-shadow 0.3s ease-out",
           }}
           onPointerDown={isResizing ? undefined : handlePointerDown}
         >
@@ -339,17 +352,19 @@ function NoteCard({
         </div>
 
         {/* Resize handles — image cards only */}
-        {isImageCard && t < 0.1 && !isDragging && isHovered && !isSelected && (() => {
+        {isImageCard && t < 0.1 && !isDragging && (() => {
+          const showCorners = isHovered && !isSelected;
           const cornerRef = Math.min(cardW, cardH);
           const cornerSize = Math.max(Math.round(cornerRef * 0.10), 70);
           const cornerInset = 15;
           const strokeW = 8;
+          const cornerStyle = { opacity: showCorners ? 1 : 0, transition: "opacity 0.2s ease-out", pointerEvents: (showCorners ? "auto" : "none") as React.CSSProperties["pointerEvents"] };
           return (
           <>
             {/* Top-left corner */}
             <div
-              className="absolute pointer-events-auto"
-              style={{ left: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
+              className="absolute"
+              style={{ ...cornerStyle, left: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
               {...makeResizeHandlers(-1, -1)}
             >
               <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "rotate(180deg)" }}>
@@ -358,8 +373,8 @@ function NoteCard({
             </div>
             {/* Top-right corner */}
             <div
-              className="absolute pointer-events-auto"
-              style={{ right: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
+              className="absolute"
+              style={{ ...cornerStyle, right: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
               {...makeResizeHandlers(1, -1)}
             >
               <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "scaleY(-1)" }}>
@@ -368,8 +383,8 @@ function NoteCard({
             </div>
             {/* Bottom-left corner */}
             <div
-              className="absolute pointer-events-auto"
-              style={{ left: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
+              className="absolute"
+              style={{ ...cornerStyle, left: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
               {...makeResizeHandlers(-1, 1)}
             >
               <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "scaleX(-1)" }}>
@@ -378,8 +393,8 @@ function NoteCard({
             </div>
             {/* Bottom-right corner */}
             <div
-              className="absolute pointer-events-auto"
-              style={{ right: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
+              className="absolute"
+              style={{ ...cornerStyle, right: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
               {...makeResizeHandlers(1, 1)}
             >
               <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none">
