@@ -9,6 +9,7 @@ export const SLASH_COMMANDS: { label: string; type: BlockType }[] = [
   { label: "Bullet List", type: "bulletList" },
   { label: "To-Do", type: "todo" },
   { label: "Quote", type: "quote" },
+  { label: "Image", type: "image" },
 ];
 
 export function executeSlashCommand(editor: Editor, cmd: (typeof SLASH_COMMANDS)[number]) {

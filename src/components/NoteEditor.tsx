@@ -5,7 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Image from "@tiptap/extension-image";
+import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser } from "lucide-react";
@@ -13,19 +13,41 @@ import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
 import { SLASH_COMMANDS, executeSlashCommand } from "../lib/slashCommands";
+import { readImageFile } from "../lib/imageUtils";
+
+// Extend Tiptap Image to carry aspect ratio
+const ImageWithAspect = BaseImage.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      aspect: {
+        default: null,
+        parseHTML: (el: HTMLElement) => {
+          const v = el.getAttribute("data-aspect");
+          return v ? parseFloat(v) : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) => {
+          if (!attrs.aspect) return {};
+          return { "data-aspect": String(attrs.aspect) };
+        },
+      },
+    };
+  },
+});
 
 interface Props {
   blocks: NoteBlock[];
   onUpdate: (blocks: NoteBlock[]) => void;
   editable: boolean;
-  headerImageUrl?: string;
 }
 
-export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl }: Props) {
+export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const initialHtml = useRef(blocksToHtml(blocks));
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const slashIdxRef = useRef(0);
   const [hasSelection, setHasSelection] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInsertPosRef = useRef<number | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -42,7 +64,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       }),
       TaskList,
       TaskItem.configure({ nested: false }),
-      Image,
+      ImageWithAspect.configure({ inline: false, allowBase64: true }),
       Underline,
     ],
     content: initialHtml.current,
@@ -60,6 +82,19 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
       handlePaste: (view, event) => {
         const scrollEl = view.dom.closest("[data-editor-overlay]");
         const scrollTop = scrollEl?.scrollTop ?? 0;
+
+        // Check for pasted image
+        const items = Array.from(event.clipboardData?.items ?? []);
+        const imageItem = items.find(item => item.type.startsWith("image/"));
+        if (imageItem) {
+          const file = imageItem.getAsFile();
+          if (file) {
+            event.preventDefault();
+            insertImageFromFile(file);
+            return true;
+          }
+        }
+
         const text = event.clipboardData?.getData("text/plain");
         if (text && looksLikeMarkdown(text)) {
           event.preventDefault();
@@ -76,6 +111,17 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
           if (scrollEl) scrollEl.scrollTop = scrollTop;
         });
         return text && looksLikeMarkdown(text) ? true : false;
+      },
+      handleDrop: (view, event) => {
+        const dt = (event as DragEvent).dataTransfer;
+        if (!dt) return false;
+        const file = Array.from(dt.files).find(f => f.type.startsWith("image/"));
+        if (file) {
+          event.preventDefault();
+          insertImageFromFile(file);
+          return true;
+        }
+        return false;
       },
       handleKeyDown: (_view, event) => {
         if (event.key === "/" && slashMenuRef.current?.style.display !== "block") {
@@ -98,10 +144,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
             return true;
           }
           if (event.key === "Enter") {
-            if (editor) {
-              executeSlashCommand(editor, SLASH_COMMANDS[slashIdxRef.current]);
-              hideSlashMenu();
-            }
+            handleSlashSelect(SLASH_COMMANDS[slashIdxRef.current]);
             return true;
           }
         }
@@ -110,14 +153,58 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
     },
   });
 
+  async function insertImageFromFile(file: File) {
+    if (!editor) return;
+    const { dataUrl, aspect } = await readImageFile(file);
+
+    const pos = imageInsertPosRef.current;
+    imageInsertPosRef.current = null;
+
+    if (pos !== null) {
+      // Insert at the position we saved before the file picker opened
+      editor.chain().focus()
+        .insertContentAt(pos, { type: "image", attrs: { src: dataUrl, aspect } })
+        .run();
+    } else {
+      // Paste / drop — insert at current cursor
+      (editor.chain().focus() as any).setImage({ src: dataUrl, aspect }).run();
+    }
+  }
+
+  function handleSlashSelect(cmd: (typeof SLASH_COMMANDS)[number]) {
+    if (!editor) return;
+    if (cmd.type === "image") {
+      // Delete the "/" character
+      const { from } = editor.state.selection;
+      editor.chain().focus().deleteRange({ from: from - 1, to: from }).run();
+
+      // If current block is now empty, remove it and save its position
+      const { $from } = editor.state.selection;
+      const parentEmpty = $from.parent.content.size === 0;
+      if (parentEmpty) {
+        const blockStart = $from.before();
+        const blockEnd = $from.after();
+        imageInsertPosRef.current = blockStart;
+        editor.chain().deleteRange({ from: blockStart, to: blockEnd }).run();
+      } else {
+        imageInsertPosRef.current = editor.state.selection.from;
+      }
+
+      fileInputRef.current?.click();
+    } else {
+      executeSlashCommand(editor, cmd);
+    }
+    hideSlashMenu();
+  }
+
   useEffect(() => {
     if (editor) {
       editor.setEditable(editable);
-      if (editable && !headerImageUrl) {
+      if (editable) {
         editor.chain().focus("start").run();
       }
     }
-  }, [editor, editable, headerImageUrl]);
+  }, [editor, editable]);
 
   // Click below content to insert empty lines
   useEffect(() => {
@@ -178,11 +265,17 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
 
   return (
     <div className="note-editor">
-      {headerImageUrl && (
-        <div className="note-editor-header-image" style={{ marginBottom: 24 }}>
-          <img src={headerImageUrl} alt="" style={{ width: "100%", display: "block" }} />
-        </div>
-      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) await insertImageFromFile(file);
+          e.target.value = "";
+        }}
+      />
       <EditorContent editor={editor} />
       <div ref={slashMenuRef} className="slash-menu" style={{ display: "none" }}>
         {SLASH_COMMANDS.map((cmd, i) => (
@@ -192,10 +285,7 @@ export default function NoteEditor({ blocks, onUpdate, editable, headerImageUrl 
             className={`slash-menu-item ${i === 0 ? "active" : ""}`}
             onMouseDown={(e) => {
               e.preventDefault();
-              if (editor) {
-                executeSlashCommand(editor, cmd);
-                hideSlashMenu();
-              }
+              handleSlashSelect(cmd);
             }}
             onMouseEnter={() => {
               slashIdxRef.current = i;

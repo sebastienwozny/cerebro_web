@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
 import { CARD_CONTENT_W } from "../constants";
-import { getCardSize } from "../lib/cardDimensions";
+import { getCardSize, getHeaderImage } from "../lib/cardDimensions";
 
 interface Props {
   note: Note;
@@ -85,12 +85,13 @@ function NoteCard({
     }
   }, [isDragging, groupDragDelta]);
 
-  const isImageCard = note.kind === "image";
+  const headerImage = getHeaderImage(note);
+  const isImageCard = headerImage !== null;
 
   // Detect if the image is light or dark to pick handle color
   const [isLightImage, setIsLightImage] = useState(false);
   useEffect(() => {
-    if (!isImageCard || !note.imageDataUrl) return;
+    if (!headerImage) return;
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement("canvas");
@@ -107,8 +108,8 @@ function NoteCard({
       }
       setIsLightImage(total / (size * size) > 160);
     };
-    img.src = note.imageDataUrl;
-  }, [isImageCard, note.imageDataUrl]);
+    img.src = headerImage.dataUrl;
+  }, [headerImage?.dataUrl]);
 
   const handleStrokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
 
@@ -179,7 +180,7 @@ function NoteCard({
   const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   useLayoutEffect(() => {
     if (isImageCard && isClosing && !closingImgRect.current) {
-      const img = document.querySelector(".note-editor-header-image img") as HTMLElement | null;
+      const img = document.querySelector("[data-editor-overlay] .tiptap img") as HTMLElement | null;
       if (img) {
         const r = img.getBoundingClientRect();
         closingImgRect.current = { x: r.left, y: r.top, w: r.width, h: r.height };
@@ -290,9 +291,9 @@ function NoteCard({
           )}
 
           {/* Image card thumbnail — visible only at rest (t=0), hidden during open/close transitions */}
-          {isImageCard && note.imageDataUrl && t === 0 && (
+          {isImageCard && headerImage && t === 0 && (
             <img
-              src={note.imageDataUrl}
+              src={headerImage.dataUrl}
               alt=""
               className="absolute pointer-events-none"
               style={{
@@ -318,8 +319,8 @@ function NoteCard({
             }}
           />
 
-          {/* Editor content (card mode — clipped). Skip for image cards — thumbnail handles it. */}
-          {!editing && !isImageCard && (
+          {/* Editor content (card mode — clipped). Image cards: only during close. */}
+          {!editing && (!isImageCard || (isClosing && t > 0)) && (
             <div
               className="absolute inset-0 flex justify-center"
               style={{
@@ -328,7 +329,7 @@ function NoteCard({
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
               }}
             >
-              <div style={{ width: CARD_CONTENT_W }}>
+              <div className={isImageCard ? "image-card-closing" : undefined} style={{ width: CARD_CONTENT_W, ...(isImageCard ? { "--text-fade": t } as React.CSSProperties : {}) }}>
                 {children}
               </div>
             </div>
@@ -442,17 +443,23 @@ function NoteCard({
             paddingRight: 20,
           }}
         >
-          <div style={{ width: "100%", maxWidth: CARD_CONTENT_W }}>
+          <div
+            className={isImageCard ? "image-card-open" : undefined}
+            style={{
+              width: "100%",
+              maxWidth: CARD_CONTENT_W,
+            }}
+          >
             {children}
           </div>
         </div>
       )}
 
       {/* Hero image for image card open/close transition — portal so it's not clipped */}
-      {isImageCard && t > 0 && !editing && note.imageDataUrl && (() => {
+      {isImageCard && t > 0 && !editing && headerImage && (() => {
         // Editor image target rect (centered, below 120px header)
         const editorImgW = CARD_CONTENT_W;
-        const editorImgH = CARD_CONTENT_W * note.imageAspect;
+        const editorImgH = CARD_CONTENT_W * headerImage.aspect;
         const editorImgX = (windowW - editorImgW) / 2;
         const editorImgY = 120;
 
@@ -464,7 +471,7 @@ function NoteCard({
 
         return createPortal(
           <img
-            src={note.imageDataUrl}
+            src={headerImage.dataUrl}
             alt=""
             style={{
               position: "fixed",

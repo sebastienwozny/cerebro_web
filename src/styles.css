@@ -132,4 +132,23 @@ html, body, #root {
   to { opacity: 1; }
 }
 
+/* Images in editor */
+.tiptap img {
+  width: 100%;
+  display: block;
+  margin: 12px 0;
+}
+
+/* Image card — fade in text below image on open */
+.image-card-open .tiptap > *:not(img) {
+  animation: fadeIn 0.3s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+/* Image card — fade out text during close, hide tiptap image (hero handles it) */
+.image-card-closing .tiptap img {
+  visibility: hidden;
+}
+.image-card-closing .tiptap > *:not(img) {
+  opacity: var(--text-fade, 1);
+}
 

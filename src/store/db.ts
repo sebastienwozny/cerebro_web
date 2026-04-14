@@ -1,6 +1,6 @@
 import Dexie, { type EntityTable } from "dexie";
 
-// ── Block types (mirrors Swift NoteBlock) ──
+// ── Block types ──
 
 export type BlockType =
   | "text"
@@ -9,28 +9,24 @@ export type BlockType =
   | "heading3"
   | "bulletList"
   | "todo"
-  | "quote";
+  | "quote"
+  | "image";
 
 export interface NoteBlock {
   id: string;
   type: BlockType;
   content: string;
   isChecked?: boolean;
+  imageDataUrl?: string; // base64 data URL (image blocks)
+  imageAspect?: number;  // height / width  (image blocks)
 }
-
-// ── Card kind ──
-
-export type CardKind = "note" | "image";
 
 // ── Note model ──
 
 export interface Note {
   id: string;
-  kind: CardKind;
   title: string;
   blocks: NoteBlock[];
-  imageDataUrl?: string; // base64 data URL for image cards
-  imageAspect: number; // height / width
   cardScale: number; // resize factor (default 1)
   positionX: number;
   positionY: number;
@@ -55,6 +51,26 @@ class CerebroDB extends Dexie {
         if (note.cardScale === undefined || note.kind === "note") {
           note.cardScale = 1;
         }
+      });
+    });
+    this.version(3).stores({
+      notes: "id, zOrder, createdAt",
+    }).upgrade(tx => {
+      return tx.table("notes").toCollection().modify(note => {
+        // Migrate image cards: move image data into a block
+        if (note.kind === "image" && note.imageDataUrl) {
+          const imageBlock = {
+            id: crypto.randomUUID(),
+            type: "image",
+            content: "",
+            imageDataUrl: note.imageDataUrl,
+            imageAspect: note.imageAspect || 1,
+          };
+          note.blocks = [imageBlock, ...note.blocks];
+        }
+        delete note.kind;
+        delete note.imageDataUrl;
+        delete note.imageAspect;
       });
     });
   }

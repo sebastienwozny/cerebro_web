@@ -11,7 +11,13 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
   while (i < blocks.length) {
     const b = blocks[i];
     const c = escapeHtml(b.content);
-    if (b.type === "bulletList") {
+    if (b.type === "image") {
+      if (b.imageDataUrl) {
+        const aspect = b.imageAspect ? ` data-aspect="${b.imageAspect}"` : "";
+        parts.push(`<img src="${b.imageDataUrl}"${aspect} />`);
+      }
+      i++;
+    } else if (b.type === "bulletList") {
       let items = `<li><p>${c}</p></li>`;
       while (++i < blocks.length && blocks[i].type === "bulletList") {
         items += `<li><p>${escapeHtml(blocks[i].content)}</p></li>`;
@@ -44,7 +50,12 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
   while (i < blocks.length) {
     const b = blocks[i];
     const c = escapeHtml(b.content);
-    if (b.type === "bulletList") {
+    if (b.type === "image") {
+      if (b.imageDataUrl) {
+        parts.push(`<img src="${b.imageDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
+      }
+      i++;
+    } else if (b.type === "bulletList") {
       let items = `<li><p>${c}</p></li>`;
       while (++i < blocks.length && blocks[i].type === "bulletList") {
         items += `<li><p>${escapeHtml(blocks[i].content)}</p></li>`;
@@ -62,12 +73,13 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
       }
       parts.push(`<ul data-type="taskList">${items}</ul>`);
     } else {
+      const fill = c || "<br>";
       switch (b.type) {
-        case "heading1": parts.push(`<h1>${c}</h1>`); break;
-        case "heading2": parts.push(`<h2>${c}</h2>`); break;
-        case "heading3": parts.push(`<h3>${c}</h3>`); break;
-        case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
-        default: parts.push(`<p>${c || ""}</p>`);
+        case "heading1": parts.push(`<h1>${fill}</h1>`); break;
+        case "heading2": parts.push(`<h2>${fill}</h2>`); break;
+        case "heading3": parts.push(`<h3>${fill}</h3>`); break;
+        case "quote": parts.push(`<blockquote><p>${fill}</p></blockquote>`); break;
+        default: parts.push(`<p>${fill}</p>`);
       }
       i++;
     }
@@ -124,6 +136,15 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
           content: textContent(p),
         });
       }
+    } else if (node.type === "image") {
+      const attrs = node.attrs as Record<string, unknown> | undefined;
+      blocks.push({
+        id: crypto.randomUUID(),
+        type: "image",
+        content: "",
+        imageDataUrl: (attrs?.src as string) ?? "",
+        imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
+      });
     } else {
       blocks.push({
         id: crypto.randomUUID(),

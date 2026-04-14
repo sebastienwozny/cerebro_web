@@ -21,7 +21,7 @@ const ZERO_DELTA = { dx: 0, dy: 0 };
 const NOOP_ID = (_id: string) => {};
 
 export default function Canvas() {
-  const { notes, addNote, addImageNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
+  const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
   const { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
   void transformVersion;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +51,8 @@ export default function Canvas() {
     popTimerRef.current = setTimeout(() => setPopIds(new Set()), 400);
   }, []);
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
+
+
 
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
@@ -226,8 +228,8 @@ export default function Canvas() {
     const noteId = crypto.randomUUID();
     triggerPop([noteId]);
     undoStack.record({ type: "create", noteIds: [noteId] });
-    await addImageNote(canvasX, canvasY, dataUrl, aspect, noteId);
-  }, [canvasLocked, getTransform, windowSize, triggerPop, addImageNote]);
+    await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
+  }, [canvasLocked, getTransform, windowSize, triggerPop, addNote]);
 
   const handleImageInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -241,8 +243,8 @@ export default function Canvas() {
     const noteId = crypto.randomUUID();
     triggerPop([noteId]);
     undoStack.record({ type: "create", noteIds: [noteId] });
-    await addImageNote(canvasX, canvasY, dataUrl, aspect, noteId);
-  }, [getTransform, triggerPop, addImageNote]);
+    await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
+  }, [getTransform, triggerPop, addNote]);
 
   const handleCardTap = useCallback(
     (noteId: string) => { clearSelection(); openNote(noteId); },
@@ -539,10 +541,7 @@ export default function Canvas() {
                 onResize={handleResize}
                 onResizeEnd={handleResizeEnd}
               >
-                <NotePreview
-                  blocks={note.blocks}
-                  headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
-                />
+                <NotePreview blocks={note.blocks} />
               </NoteCard>
             </div>
           );
@@ -579,11 +578,10 @@ export default function Canvas() {
             <NoteEditor
               blocks={note.blocks}
               onUpdate={(blocks) => {
-                const title = blocks[0]?.content ?? "";
+                const title = blocks.find(b => b.type !== "image")?.content ?? "";
                 updateNote(note.id, { blocks, title });
               }}
               editable={openProgress >= 1}
-              headerImageUrl={note.kind === "image" ? note.imageDataUrl : undefined}
             />
           </NoteCard>
         </div>

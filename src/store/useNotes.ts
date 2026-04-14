@@ -13,39 +13,21 @@ function getMaxZ(notes: Note[]): number {
 export function useNotes() {
   const notes = useLiveQuery(() => db.notes.orderBy("zOrder").toArray()) ?? [];
 
-  async function addNote(x: number, y: number, id?: string): Promise<Note> {
-    const maxZ = getMaxZ(notes);
-    const note: Note = {
-      id: id ?? uuid(),
-      kind: "note",
-      title: "",
-      blocks: [makeBlock("heading1")],
-      imageAspect: 0,
-      cardScale: 1,
-      positionX: x,
-      positionY: y,
-      zOrder: maxZ + 1,
-      createdAt: new Date(),
-    };
-    await db.notes.add(note);
-    return note;
-  }
-
-  async function addImageNote(
+  async function addNote(
     x: number,
     y: number,
-    imageDataUrl: string,
-    imageAspect: number,
     id?: string,
+    imageDataUrl?: string,
+    imageAspect?: number,
   ): Promise<Note> {
     const maxZ = getMaxZ(notes);
+    const blocks: NoteBlock[] = imageDataUrl
+      ? [{ id: uuid(), type: "image", content: "", imageDataUrl, imageAspect: imageAspect ?? 1 }, makeBlock("text")]
+      : [makeBlock("heading1")];
     const note: Note = {
       id: id ?? uuid(),
-      kind: "image",
       title: "",
-      blocks: [makeBlock("text")],
-      imageDataUrl,
-      imageAspect,
+      blocks,
       cardScale: 1,
       positionX: x,
       positionY: y,
@@ -81,5 +63,5 @@ export function useNotes() {
     await db.notes.update(id, { zOrder: maxZ + 1 });
   }
 
-  return { notes, addNote, addImageNote, updateNote, deleteNote, duplicateNote, bringToFront };
+  return { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront };
 }
