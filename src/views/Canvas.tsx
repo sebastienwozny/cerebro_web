@@ -128,7 +128,7 @@ export default function Canvas() {
             posY: action.oldPosY,
             duration: 0.35,
             ease: "power2.out",
-            onUpdate: () => db.notes.update(action.noteId, { cardScale: obj.scale, positionX: obj.posX, positionY: obj.posY }),
+            onUpdate: () => { db.notes.update(action.noteId, { cardScale: obj.scale, positionX: obj.posX, positionY: obj.posY }); },
             onComplete: resolve,
           });
         });

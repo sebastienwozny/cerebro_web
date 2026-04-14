@@ -112,7 +112,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         });
         return text && looksLikeMarkdown(text) ? true : false;
       },
-      handleDrop: (view, event) => {
+      handleDrop: (_view, event) => {
         const dt = (event as DragEvent).dataTransfer;
         if (!dt) return false;
         const file = Array.from(dt.files).find(f => f.type.startsWith("image/"));
