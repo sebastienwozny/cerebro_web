@@ -1,7 +1,10 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
+import { useCardHover } from "../hooks/useCardHover";
+import { useCardResize } from "../hooks/useCardResize";
+import { useImageBrightness } from "../hooks/useImageBrightness";
 import { CARD_CONTENT_W } from "../constants";
 import { getCardSize, getHeaderImage } from "../lib/cardDimensions";
 
@@ -41,16 +44,69 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+const CORNER_PATH = "M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984";
+const CORNER_VIEWBOX = "0 0 71 71";
+const CORNER_INSET = 15;
+const CORNER_STROKE_W = 8;
+
+interface CornerHandleProps {
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  size: number;
+  strokeColor: string;
+  visible: boolean;
+  resizeHandlers: { onPointerDown: (e: React.PointerEvent) => void };
+}
+
+function CornerHandle({ position, size, strokeColor, visible, resizeHandlers }: CornerHandleProps) {
+  const posStyle: React.CSSProperties =
+    position === "top-left" ? { left: CORNER_INSET, top: CORNER_INSET, cursor: "nwse-resize" } :
+    position === "top-right" ? { right: CORNER_INSET, top: CORNER_INSET, cursor: "nesw-resize" } :
+    position === "bottom-left" ? { left: CORNER_INSET, bottom: CORNER_INSET, cursor: "nesw-resize" } :
+    { right: CORNER_INSET, bottom: CORNER_INSET, cursor: "nwse-resize" };
+
+  const svgTransform =
+    position === "top-left" ? "rotate(180deg)" :
+    position === "top-right" ? "scaleY(-1)" :
+    position === "bottom-left" ? "scaleX(-1)" :
+    undefined;
+
+  return (
+    <div
+      className="absolute"
+      style={{
+        ...posStyle,
+        width: size,
+        height: size,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        opacity: visible ? 1 : 0,
+        transition: "opacity 0.2s ease-out",
+        pointerEvents: visible ? "auto" : "none",
+      }}
+      {...resizeHandlers}
+    >
+      <svg width={size} height={size} viewBox={CORNER_VIEWBOX} fill="none" style={svgTransform ? { transform: svgTransform } : undefined}>
+        <path d={CORNER_PATH} stroke={strokeColor} strokeWidth={CORNER_STROKE_W / size * 71} strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
   children,
 }: Props) {
-  const [isHovered, setIsHovered] = useState(false);
-  const [isPointerOver, setIsPointerOver] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const headerImage = getHeaderImage(note);
+  const isImageCard = headerImage !== null;
+
+  const { w: cardW, h: cardH } = getCardSize(note);
+  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
+  const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
   const { isDragging, dragRotation, handlePointerDown } = useCardDrag({
     noteId: note.id,
@@ -69,125 +125,30 @@ function NoteCard({
     onBringToFront,
   });
 
-  // Clear hover when drag starts
-  useEffect(() => {
-    if (isDragging) setIsHovered(false);
-  }, [isDragging]);
-
-  // Reset pointer state when a card opens or hover gets suppressed
-  // Brief cooldown after suppression ends to ignore stale mouseEnter events
-  const hoverCooldownRef = useRef(false);
-  useEffect(() => {
-    if (isOpen || hoverSuppressed) {
-      setIsPointerOver(false);
-      setIsHovered(false);
-      hoverCooldownRef.current = true;
-    } else {
-      hoverCooldownRef.current = true;
-      const timer = setTimeout(() => { hoverCooldownRef.current = false; }, 50);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, hoverSuppressed]);
-
-
-
-  // Suppress hover scale after any interaction — only reset on true mouse leave+enter
-  const [suppressScale, setSuppressScale] = useState(false);
-  useEffect(() => {
-    if (isDragging) setSuppressScale(true);
-  }, [isDragging]);
-
-  const headerImage = getHeaderImage(note);
-  const isImageCard = headerImage !== null;
-
-  // Detect if the image is light or dark to pick handle color
-  const [isLightImage, setIsLightImage] = useState(false);
-  useEffect(() => {
-    if (!headerImage) return;
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      const size = 32; // sample at low res
-      canvas.width = size;
-      canvas.height = size;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0, size, size);
-      const data = ctx.getImageData(0, 0, size, size).data;
-      let total = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        total += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-      }
-      setIsLightImage(total / (size * size) > 160);
-    };
-    img.src = headerImage.dataUrl;
-  }, [headerImage?.dataUrl]);
-
-  const handleStrokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
-
-  const { w: cardW, h: cardH } = getCardSize(note);
-  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
-  // Base (unscaled) size — used as the animation target for open/close
-  const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
-
-  // ── Resize handle logic ──
   const resizingRef = useRef(false);
-  const resizeStartRef = useRef({ pointerX: 0, startScale: 1, startPosX: 0, startPosY: 0, dirX: 1, dirY: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  const baseW_resize = cardW / (note.cardScale || 1);
-  const baseH_resize = cardH / (note.cardScale || 1);
+  const {
+    isHovered, isPointerOver, suppressScale,
+    onMouseEnter, onMouseLeave, onInteractionStart, onResizeEnd: onHoverResizeEnd,
+  } = useCardHover({ isDragging, isResizingRef: resizingRef, cardRef, isOpen, hoverSuppressed, isPopping, openProgress });
 
-  // Global listeners for resize move/up so they fire even if the handle unmounts
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      if (!resizingRef.current) return;
-      const ref = resizeStartRef.current;
-      const dx = (e.clientX - ref.pointerX) * ref.dirX;
-      const newScale = Math.max(0.3, ref.startScale + dx / baseW_resize / scale);
-      const deltaW = (newScale - ref.startScale) * baseW_resize;
-      const deltaH = (newScale - ref.startScale) * baseH_resize;
-      const newPosX = ref.startPosX + ref.dirX * deltaW / 2;
-      const newPosY = ref.startPosY + ref.dirY * deltaH / 2;
-      onResize?.(note.id, newScale, newPosX, newPosY);
-    };
-    const onUp = () => {
-      if (resizingRef.current) {
-        onResizeEnd?.(note.id, resizeStartRef.current.startScale, resizeStartRef.current.startPosX, resizeStartRef.current.startPosY);
-      }
-      resizingRef.current = false;
-      setIsResizing(false);
-      setIsPointerOver(true);
-      resizeCaptureRef.current = null;
-    };
-    const onBlur = () => { if (resizingRef.current) onUp(); };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("blur", onBlur);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("blur", onBlur);
-    };
+  const { isResizing, makeResizeHandlers } = useCardResize({
+    noteId: note.id,
+    cardScale: note.cardScale || 1,
+    positionX: note.positionX,
+    positionY: note.positionY,
+    baseW: cardW / (note.cardScale || 1),
+    baseH: cardH / (note.cardScale || 1),
+    canvasScale: scale,
+    resizingRef,
+    onResize,
+    onResizeEnd,
+    onInteractionStart,
+    onResizeRelease: onHoverResizeEnd,
   });
 
-  const resizeCaptureRef = useRef<Element | null>(null);
-
-  const makeResizeHandlers = (dirX: 1 | -1, dirY: -1 | 0 | 1) => ({
-    onPointerDown: (e: React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      (e.target as Element).setPointerCapture(e.pointerId);
-      resizeCaptureRef.current = e.target as Element;
-      resizingRef.current = true;
-      setIsResizing(true);
-      setSuppressScale(true);
-      resizeStartRef.current = { pointerX: e.clientX, startScale: note.cardScale || 1, startPosX: note.positionX, startPosY: note.positionY, dirX, dirY };
-    },
-  });
+  const isLightImage = useImageBrightness(headerImage?.dataUrl);
 
   // Hero animation for image card close: capture image screen rect before overlay unmounts
   const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
@@ -239,6 +200,7 @@ function NoteCard({
   return (
     <>
       <div
+        ref={cardRef}
         className="absolute select-none pointer-events-auto"
         style={{
           left: visualLeft,
@@ -267,16 +229,8 @@ function NoteCard({
                   ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out"
                   : "transform 0.15s ease-out",
         }}
-        onMouseEnter={() => {
-          if (hoverCooldownRef.current) return;
-          setSuppressScale(false);
-          setIsPointerOver(true);
-          if (!isOpen && !hoverSuppressed && !isPopping && !isResizing && t < 0.1) setIsHovered(true);
-        }}
-        onMouseLeave={() => {
-          if (!isResizing) setIsPointerOver(false);
-          if (!isResizing) setIsHovered(false);
-        }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
       >
         {/* Clipped card content */}
         <div
@@ -295,7 +249,7 @@ function NoteCard({
                   : "0 10px 20px -12px rgba(0,0,0,0.15), 0 32px 40px -8px rgba(0,0,0,0.04)",
             transition: t > 0 ? "none" : "box-shadow 0.3s ease-out",
           }}
-          onPointerDown={isResizing ? undefined : (e) => { setSuppressScale(true); handlePointerDown(e); }}
+          onPointerDown={isResizing ? undefined : (e) => { onInteractionStart(); handlePointerDown(e); }}
         >
         {/* Inner wrapper */}
         <div
@@ -381,54 +335,15 @@ function NoteCard({
 
         {/* Resize handles — image cards only */}
         {isImageCard && openProgress === 0 && !isDragging && (() => {
-          const showCorners = isPointerOver && !hoverSuppressed;
-          const cornerRef = Math.min(cardW, cardH);
-          const cornerSize = Math.max(Math.round(cornerRef * 0.10), 70);
-          const cornerInset = 15;
-          const strokeW = 8;
-          const cornerStyle = { opacity: showCorners ? 1 : 0, transition: "opacity 0.2s ease-out", pointerEvents: (showCorners ? "auto" : "none") as React.CSSProperties["pointerEvents"] };
+          const showCorners = isPointerOver && !hoverSuppressed && !isSelected;
+          const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.10), 70);
+          const strokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
           return (
           <>
-            {/* Top-left corner */}
-            <div
-              className="absolute"
-              style={{ ...cornerStyle, left: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
-              {...makeResizeHandlers(-1, -1)}
-            >
-              <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "rotate(180deg)" }}>
-                <path d="M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984" stroke={handleStrokeColor} strokeWidth={strokeW / cornerSize * 71} strokeLinecap="round" />
-              </svg>
-            </div>
-            {/* Top-right corner */}
-            <div
-              className="absolute"
-              style={{ ...cornerStyle, right: cornerInset, top: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
-              {...makeResizeHandlers(1, -1)}
-            >
-              <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "scaleY(-1)" }}>
-                <path d="M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984" stroke={handleStrokeColor} strokeWidth={strokeW / cornerSize * 71} strokeLinecap="round" />
-              </svg>
-            </div>
-            {/* Bottom-left corner */}
-            <div
-              className="absolute"
-              style={{ ...cornerStyle, left: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nesw-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
-              {...makeResizeHandlers(-1, 1)}
-            >
-              <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none" style={{ transform: "scaleX(-1)" }}>
-                <path d="M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984" stroke={handleStrokeColor} strokeWidth={strokeW / cornerSize * 71} strokeLinecap="round" />
-              </svg>
-            </div>
-            {/* Bottom-right corner */}
-            <div
-              className="absolute"
-              style={{ ...cornerStyle, right: cornerInset, bottom: cornerInset, width: cornerSize, height: cornerSize, cursor: "nwse-resize", display: "flex", alignItems: "center", justifyContent: "center" }}
-              {...makeResizeHandlers(1, 1)}
-            >
-              <svg width={cornerSize} height={cornerSize} viewBox="0 0 71 71" fill="none">
-                <path d="M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984" stroke={handleStrokeColor} strokeWidth={strokeW / cornerSize * 71} strokeLinecap="round" />
-              </svg>
-            </div>
+            <CornerHandle position="top-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, -1)} />
+            <CornerHandle position="top-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, -1)} />
+            <CornerHandle position="bottom-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, 1)} />
+            <CornerHandle position="bottom-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, 1)} />
           </>
           );
         })()}
