@@ -208,6 +208,12 @@ function NoteCard({
   const innerH = t > 0 ? visualHeight / scl : cardH;
   const editing = openProgress >= 1;
 
+  // Reset scroll to top when editor opens
+  useLayoutEffect(() => {
+    if (editing && scrollRef.current) {
+      scrollRef.current.scrollTop = 0;
+    }
+  }, [editing]);
 
   const closingScrollY = !editing && openProgress > 0 && closingScrollOffset > 0
     ? -closingScrollOffset * openProgress

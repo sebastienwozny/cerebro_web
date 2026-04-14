@@ -140,6 +140,9 @@ html, body, #root {
 }
 
 /* Image card — fade in text below image on open */
+.image-card-open .tiptap > img:first-child {
+  margin-top: 0;
+}
 .image-card-open .tiptap > *:not(img) {
   animation: fadeIn 0.3s cubic-bezier(0.33, 1, 0.68, 1);
 }

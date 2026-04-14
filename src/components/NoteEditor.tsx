@@ -201,7 +201,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (editor) {
       editor.setEditable(editable);
       if (editable) {
-        editor.chain().focus("start").run();
+        const hasHeaderImage = editor.getJSON().content?.[0]?.type === "image";
+        if (hasHeaderImage) {
+          editor.commands.blur();
+        } else {
+          editor.commands.setTextSelection(0);
+          (editor.view.dom as HTMLElement).focus({ preventScroll: true });
+        }
       }
     }
   }, [editor, editable]);
