@@ -526,7 +526,7 @@ export default function Canvas() {
                 isAnimating={animatingIds.has(note.id)}
                 openProgress={0}
                 closingScrollOffset={0}
-                hoverSuppressed={marquee !== null}
+                hoverSuppressed={marquee !== null || openNoteId !== null}
                 groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
                 groupDragRotation={inGroupDrag ? groupDragRotation : 0}
                 onTap={handleCardTap}

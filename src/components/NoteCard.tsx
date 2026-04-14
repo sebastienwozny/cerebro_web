@@ -74,6 +74,21 @@ function NoteCard({
     if (isDragging) setIsHovered(false);
   }, [isDragging]);
 
+  // Reset pointer state when a card opens or hover gets suppressed
+  // Brief cooldown after suppression ends to ignore stale mouseEnter events
+  const hoverCooldownRef = useRef(false);
+  useEffect(() => {
+    if (isOpen || hoverSuppressed) {
+      setIsPointerOver(false);
+      setIsHovered(false);
+      hoverCooldownRef.current = true;
+    } else {
+      hoverCooldownRef.current = true;
+      const timer = setTimeout(() => { hoverCooldownRef.current = false; }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, hoverSuppressed]);
+
 
 
   // Suppress hover scale after any interaction — only reset on true mouse leave+enter
@@ -253,6 +268,7 @@ function NoteCard({
                   : "transform 0.15s ease-out",
         }}
         onMouseEnter={() => {
+          if (hoverCooldownRef.current) return;
           setSuppressScale(false);
           setIsPointerOver(true);
           if (!isOpen && !hoverSuppressed && !isPopping && !isResizing && t < 0.1) setIsHovered(true);
@@ -365,7 +381,7 @@ function NoteCard({
 
         {/* Resize handles — image cards only */}
         {isImageCard && openProgress === 0 && !isDragging && (() => {
-          const showCorners = isPointerOver;
+          const showCorners = isPointerOver && !hoverSuppressed;
           const cornerRef = Math.min(cardW, cardH);
           const cornerSize = Math.max(Math.round(cornerRef * 0.10), 70);
           const cornerInset = 15;
