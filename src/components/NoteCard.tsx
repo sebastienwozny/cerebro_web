@@ -48,6 +48,7 @@ function NoteCard({
   children,
 }: Props) {
   const [isHovered, setIsHovered] = useState(false);
+  const [isPointerOver, setIsPointerOver] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -68,22 +69,18 @@ function NoteCard({
     onBringToFront,
   });
 
-  // Clear hover when drag starts so it doesn't trigger on release
+  // Clear hover when drag starts
   useEffect(() => {
     if (isDragging) setIsHovered(false);
   }, [isDragging]);
 
 
 
-  // Suppress scale after drag — re-enable when drag ends or selection changes
-  const wasDraggedRef = useRef(false);
+  // Suppress hover scale after any interaction — only reset on true mouse leave+enter
+  const [suppressScale, setSuppressScale] = useState(false);
   useEffect(() => {
-    if (isDragging || groupDragDelta.dx !== 0 || groupDragDelta.dy !== 0) {
-      wasDraggedRef.current = true;
-    } else {
-      wasDraggedRef.current = false;
-    }
-  }, [isDragging, groupDragDelta]);
+    if (isDragging) setSuppressScale(true);
+  }, [isDragging]);
 
   const headerImage = getHeaderImage(note);
   const isImageCard = headerImage !== null;
@@ -144,7 +141,7 @@ function NoteCard({
       }
       resizingRef.current = false;
       setIsResizing(false);
-      setIsHovered(false);
+      setIsPointerOver(true);
       resizeCaptureRef.current = null;
     };
     const onBlur = () => { if (resizingRef.current) onUp(); };
@@ -172,6 +169,7 @@ function NoteCard({
       resizeCaptureRef.current = e.target as Element;
       resizingRef.current = true;
       setIsResizing(true);
+      setSuppressScale(true);
       resizeStartRef.current = { pointerX: e.clientX, startScale: note.cardScale || 1, startPosX: note.positionX, startPosY: note.positionY, dirX, dirY };
     },
   });
@@ -239,7 +237,7 @@ function NoteCard({
                 ? `rotate(${rotation}deg)`
                 : t > 0
                   ? "none"
-                  : (isSelected || isHovered) && !wasDraggedRef.current && !isResizing
+                  : (isSelected || isHovered) && !suppressScale && !isResizing
                     ? "scale(1.02)"
                     : "none",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
@@ -247,15 +245,22 @@ function NoteCard({
           transition: isDeleting
             ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
             : isDragging || isFollowing
-              ? "opacity 0.3s ease-out"
+              ? "transform 0.15s ease-out, opacity 0.3s ease-out"
               : t > 0
                 ? "none"
                 : isAnimating
                   ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out"
                   : "transform 0.15s ease-out",
         }}
-        onMouseEnter={() => !isOpen && !hoverSuppressed && !isPopping && !isResizing && t < 0.1 && setIsHovered(true)}
-        onMouseLeave={() => !isResizing && setIsHovered(false)}
+        onMouseEnter={() => {
+          setSuppressScale(false);
+          setIsPointerOver(true);
+          if (!isOpen && !hoverSuppressed && !isPopping && !isResizing && t < 0.1) setIsHovered(true);
+        }}
+        onMouseLeave={() => {
+          if (!isResizing) setIsPointerOver(false);
+          if (!isResizing) setIsHovered(false);
+        }}
       >
         {/* Clipped card content */}
         <div
@@ -274,7 +279,7 @@ function NoteCard({
                   : "0 10px 20px -12px rgba(0,0,0,0.15), 0 32px 40px -8px rgba(0,0,0,0.04)",
             transition: t > 0 ? "none" : "box-shadow 0.3s ease-out",
           }}
-          onPointerDown={isResizing ? undefined : handlePointerDown}
+          onPointerDown={isResizing ? undefined : (e) => { setSuppressScale(true); handlePointerDown(e); }}
         >
         {/* Inner wrapper */}
         <div
@@ -359,8 +364,8 @@ function NoteCard({
         </div>
 
         {/* Resize handles — image cards only */}
-        {isImageCard && t < 0.1 && !isDragging && (() => {
-          const showCorners = isHovered && !isSelected;
+        {isImageCard && openProgress === 0 && !isDragging && (() => {
+          const showCorners = isPointerOver;
           const cornerRef = Math.min(cardW, cardH);
           const cornerSize = Math.max(Math.round(cornerRef * 0.10), 70);
           const cornerInset = 15;
