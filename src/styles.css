@@ -82,6 +82,19 @@ html, body, #root {
 /* Body — regular weight (400) */
 .tiptap p  { font-size: 16px; font-weight: 400; line-height: 26px; margin-bottom: 14px; }
 
+/* Links */
+.tiptap a, .tiptap .editor-link {
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(128, 128, 128, 0.6);
+  cursor: text;
+  transition: text-decoration-color 0.15s ease-out;
+}
+.tiptap a:hover, .tiptap .editor-link:hover {
+  text-decoration-color: rgba(128, 128, 128, 0.8);
+}
+
 /* Lists — aligned with checkboxes, no indent */
 .tiptap ul, .tiptap ol { padding-left: 0; margin-bottom: 24px; list-style: none; }
 .tiptap li { line-height: 26px; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 8px; }

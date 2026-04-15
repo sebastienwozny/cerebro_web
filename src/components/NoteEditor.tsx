@@ -8,7 +8,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import { useEffect, useRef, useState } from "react";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -45,7 +45,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const initialHtml = useRef(blocksToHtml(blocks));
   const slashMenuRef = useRef<HTMLDivElement>(null);
   const slashIdxRef = useRef(0);
-  const [hasSelection, setHasSelection] = useState(false);
+  const [showToolbar, setShowToolbar] = useState(false);
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const linkInputRef = useRef<HTMLInputElement>(null);
+  const linkManualRef = useRef(false);
+  const [linkTooltips, setLinkTooltips] = useState(false);
+  const [formatTooltips, setFormatTooltips] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInsertPosRef = useRef<number | null>(null);
 
@@ -53,6 +59,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        link: {
+          openOnClick: false,
+          HTMLAttributes: { class: "editor-link" },
+        },
       }),
       Placeholder.configure({
         placeholder: ({ node }) => {
@@ -74,7 +84,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       hideSlashMenu();
     },
     onSelectionUpdate: ({ editor }) => {
-      setHasSelection(!editor.state.selection.empty);
+      const sel = !editor.state.selection.empty;
+      if (sel) setShowToolbar(true);
+      // Exit link mode when cursor moves off a link (unless manually opened)
+      if (!editor.isActive("link") && !linkManualRef.current) {
+        setLinkMode(false);
+        setLinkUrl("");
+      }
     },
     editorProps: {
       scrollThreshold: 0,
@@ -124,6 +140,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         return false;
       },
       handleKeyDown: (_view, event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+          event.preventDefault();
+          enterLinkMode();
+          return true;
+        }
         if (event.key === "/" && slashMenuRef.current?.style.display !== "block") {
           setTimeout(() => showSlashMenu(), 0);
           return false;
@@ -222,10 +243,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       const tiptap = editor.view.dom;
       const tiptapRect = tiptap.getBoundingClientRect();
 
-      // Click in left/right margins — clear selection
+      // Click in left/right margins — clear selection and close toolbars
       if (me.clientX < tiptapRect.left || me.clientX > tiptapRect.right) {
         editor.commands.blur();
-        setHasSelection(false);
+        setShowToolbar(false);
+        setLinkMode(false);
+        setLinkUrl("");
+        linkManualRef.current = false;
         return;
       }
 
@@ -234,6 +258,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         ? lastChild.getBoundingClientRect().bottom
         : tiptapRect.top;
       if (me.clientY <= contentBottom) return;
+      setShowToolbar(false);
+      setLinkMode(false);
+      setLinkUrl("");
+      linkManualRef.current = false;
       const sampleP = tiptap.querySelector("p");
       const lineH = sampleP
         ? sampleP.getBoundingClientRect().height + parseFloat(getComputedStyle(sampleP).marginBottom)
@@ -246,6 +274,47 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     overlay.addEventListener("click", handleOverlayClick);
     return () => overlay.removeEventListener("click", handleOverlayClick);
   }, [editor, editable]);
+
+  useEffect(() => {
+    if (linkMode) {
+      linkInputRef.current?.focus();
+      setLinkTooltips(false);
+    } else {
+      setFormatTooltips(false);
+    }
+  }, [linkMode]);
+
+  function enterLinkMode() {
+    if (!editor) return;
+    const href = editor.isActive("link") ? editor.getAttributes("link").href || "" : "";
+    setLinkUrl(href);
+    setLinkMode(true);
+    linkManualRef.current = true;
+  }
+
+  function applyLink() {
+    if (!editor) return;
+    const url = linkUrl.trim();
+    if (url) {
+      const href = /^https?:\/\//.test(url) ? url : `https://${url}`;
+      editor.chain().focus().setLink({ href }).run();
+    } else {
+      editor.chain().focus().unsetLink().run();
+    }
+    setLinkMode(false);
+    setShowToolbar(false);
+    setLinkUrl("");
+    linkManualRef.current = false;
+  }
+
+  function removeLink() {
+    if (!editor) return;
+    editor.chain().focus().unsetLink().run();
+    setLinkMode(false);
+    setShowToolbar(false);
+    setLinkUrl("");
+    linkManualRef.current = false;
+  }
 
   function showSlashMenu() {
     const menu = slashMenuRef.current;
@@ -302,43 +371,83 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           </div>
         ))}
       </div>
-      {/* Floating format toolbar — rendered via portal so fixed positioning works */}
+      {/* Floating toolbars — rendered via portal so fixed positioning works */}
       {editable && createPortal(
-        <div
-          className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${hasSelection ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80"}`}
-          style={{ zIndex: 10002, background: "#1a1c1e", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
-        >
-          {[
-            { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
-            { icon: Italic, label: "Italic", cmd: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic"), shortcut: "⌘I" },
-            { icon: UnderlineIcon, label: "Underline", cmd: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline"), shortcut: "⌘U" },
-            { icon: Strikethrough, label: "Strikethrough", cmd: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike"), shortcut: "⌘⇧X" },
-          ].map(({ icon: Icon, label, cmd, active, shortcut }, i) => (
-            <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108">
+        <>
+          {/* Format bar */}
+          <div
+            className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${(showToolbar || linkMode) && !linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
+            style={{ zIndex: 10002, background: "#1a1c1e", pointerEvents: (showToolbar && !linkMode) ? "auto" : "none", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+          >
+            {[
+              { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
+              { icon: Italic, label: "Italic", cmd: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic"), shortcut: "⌘I" },
+              { icon: UnderlineIcon, label: "Underline", cmd: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline"), shortcut: "⌘U" },
+              { icon: Strikethrough, label: "Strikethrough", cmd: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike"), shortcut: "⌘⇧X" },
+              { icon: Link2, label: "Link", cmd: () => enterLinkMode(), active: editor?.isActive("link"), shortcut: "⌘K" },
+            ].map(({ icon: Icon, label, cmd, active, shortcut }, i) => (
+              <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setFormatTooltips(true)}>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); cmd(); }}
+                  className={`w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none transition-colors duration-150 ${active ? "text-white bg-[#333] dark:bg-neutral-800" : "text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800"}`}
+                >
+                  <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
+                </button>
+                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8 flex items-center gap-2`}>
+                  <span>{label}</span>
+                  <span className="text-white/60">{shortcut}</span>
+                </div>
+              </div>
+            ))}
+            <div className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110" onMouseLeave={() => setFormatTooltips(true)}>
               <button
-                onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                className={`w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none transition-colors duration-150 ${active ? "text-white bg-[#333] dark:bg-neutral-800" : "text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800"}`}
+                onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
+                className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
               >
-                <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
+                <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
               </button>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8 flex items-center gap-2">
-                <span>{label}</span>
-                <span className="text-white/60">{shortcut}</span>
+              <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8`}>
+                Clear
               </div>
             </div>
-          ))}
-          <div className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110">
-            <button
-              onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
-              className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
-            >
-              <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
-            </button>
-            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8">
-              Clear
-            </div>
           </div>
-        </div>,
+          {/* Link bar */}
+          <div
+            className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
+            style={{ zIndex: 10002, background: "#1a1c1e", pointerEvents: linkMode ? "auto" : "none", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+          >
+            <input
+              ref={linkInputRef}
+              type="text"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); applyLink(); }
+                if (e.key === "Escape") { e.preventDefault(); setLinkMode(false); setLinkUrl(""); linkManualRef.current = false; editor?.commands.focus(); }
+              }}
+              placeholder="Paste link..."
+              className="h-10 px-3 bg-transparent border-none outline-none text-sm text-white placeholder-neutral-500"
+              style={{ width: 220 }}
+            />
+            {[
+              { icon: Check, label: "Apply", cmd: () => applyLink() },
+              { icon: ExternalLink, label: "Open", cmd: () => { if (linkUrl.trim()) { const href = /^https?:\/\//.test(linkUrl.trim()) ? linkUrl.trim() : `https://${linkUrl.trim()}`; window.open(href, "_blank"); } } },
+              { icon: Unlink, label: "Unlink", cmd: () => removeLink() },
+            ].map(({ icon: Icon, label, cmd }, i) => (
+              <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setLinkTooltips(true)}>
+                <button
+                  onMouseDown={(e) => { e.preventDefault(); cmd(); }}
+                  className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
+                >
+                  <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
+                </button>
+                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${linkTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8`}>
+                  {label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>,
         document.body,
       )}
     </div>
