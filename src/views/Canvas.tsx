@@ -9,7 +9,7 @@ import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import gsap from "gsap";
-import { DELETE_DURATION } from "../constants";
+import { DELETE_DURATION, CARD_W, CARD_H, GRID_GAP } from "../constants";
 import { getCardSize } from "../lib/cardDimensions";
 import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
 import NoteCard from "../components/NoteCard";
@@ -178,9 +178,55 @@ export default function Canvas() {
     undoStack.pushUndo(inverse);
   }, [applyInverse]);
 
+  const reorderSelected = useCallback(async () => {
+    const selected = notes.filter(n => selectedIds.has(n.id));
+    if (selected.length < 2) return;
+
+    // Record old positions for undo
+    const moves = selected.map(n => ({ noteId: n.id, oldX: n.positionX, oldY: n.positionY }));
+
+    // Barycenter
+    const cx = selected.reduce((s, n) => s + n.positionX, 0) / selected.length;
+    const cy = selected.reduce((s, n) => s + n.positionY, 0) / selected.length;
+
+    // Sort left-to-right by current position
+    const sorted = [...selected].sort((a, b) => {
+      if (Math.abs(a.positionX - b.positionX) > CARD_W / 4) return a.positionX - b.positionX;
+      return a.positionY - b.positionY;
+    });
+
+    // Compute sizes and total width
+    const sizes = sorted.map(n => getCardSize(n));
+    const totalW = sizes.reduce((s, sz) => s + sz.w, 0) + (sorted.length - 1) * GRID_GAP;
+    const maxH = Math.max(...sizes.map(sz => sz.h));
+
+    // Enable CSS transition
+    setAnimatingIds(new Set(selected.map(n => n.id)));
+
+    // Place cards in a row: tops aligned, equal gaps, centered on barycenter
+    let cursor = -totalW / 2;
+    await db.transaction("rw", db.notes, async () => {
+      for (let i = 0; i < sorted.length; i++) {
+        const sz = sizes[i];
+        await db.notes.update(sorted[i].id, {
+          positionX: cx + cursor + sz.w / 2,
+          positionY: cy + maxH / 2 - sz.h / 2,
+        });
+        cursor += sz.w + GRID_GAP;
+      }
+    });
+
+    // Wait for CSS transition to complete
+    await new Promise(r => setTimeout(r, 380));
+    setAnimatingIds(new Set());
+
+    undoStack.record({ type: "move", moves });
+  }, [notes, selectedIds]);
+
   useKeyboardShortcuts({
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
     closeNote, clearSelection, selectAll, deleteNote, openNote,
+    reorderSelected,
     onUndo: performUndo, onRedo: performRedo,
     recordAction: undoStack.record.bind(undoStack),
   });

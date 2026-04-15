@@ -14,6 +14,7 @@ interface UseKeyboardShortcutsOptions {
   selectAll: () => void;
   deleteNote: (id: string) => void;
   openNote: (id: string) => void;
+  reorderSelected: () => void;
   onUndo: () => void;
   onRedo: () => void;
   recordAction: (action: CanvasAction) => void;
@@ -30,6 +31,7 @@ export function useKeyboardShortcuts({
   selectAll,
   deleteNote,
   openNote,
+  reorderSelected,
   onUndo,
   onRedo,
   recordAction,
@@ -70,6 +72,11 @@ export function useKeyboardShortcuts({
       if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         selectAll();
+        return;
+      }
+      if (e.key === "g" && (e.metaKey || e.ctrlKey) && selectedIds.size >= 2) {
+        e.preventDefault();
+        reorderSelected();
         return;
       }
       if (e.key === "Tab" && notes.length > 0) {
@@ -126,5 +133,5 @@ export function useKeyboardShortcuts({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote, onUndo, onRedo, recordAction]);
+  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote, reorderSelected, onUndo, onRedo, recordAction]);
 }

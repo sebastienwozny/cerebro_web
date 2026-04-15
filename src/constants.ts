@@ -11,6 +11,9 @@ export const CLOSE_DURATION = 0.5;
 // Delete animation duration (seconds) — matches CSS transition in NoteCard
 export const DELETE_DURATION = 0.4;
 
+// Grid reorder
+export const GRID_GAP = 100;
+
 // Canvas zoom bounds
 export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 3;
