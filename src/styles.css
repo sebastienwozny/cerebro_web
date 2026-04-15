@@ -60,6 +60,11 @@ html, body, #root {
   to { opacity: 1; transform: scale(1); }
 }
 
+@keyframes shadowFadeIn {
+  from { box-shadow: 0 10px 20px -12px rgba(0,0,0,0), 0 32px 40px -8px rgba(0,0,0,0); }
+  to { box-shadow: 0 10px 20px -12px rgba(0,0,0,0.05), 0 32px 40px -8px rgba(0,0,0,0.02); }
+}
+
 .tiptap strong { font-weight: 700; }
 
 /* ── TipTap prose styling (can't be utility-only) ── */

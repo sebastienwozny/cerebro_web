@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Note } from "../store/db";
 import { useCardDrag } from "../hooks/useCardDrag";
@@ -100,6 +100,13 @@ function NoteCard({
   children,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Shadow fade-in on mount: useEffect fires after paint, so the browser
+  // renders the transparent shadow first, then the transition kicks in.
+  const [shadowReady, setShadowReady] = useState(false);
+  useEffect(() => {
+    requestAnimationFrame(() => setShadowReady(true));
+  }, []);
 
   const headerImage = getHeaderImage(note);
   const isImageCard = headerImage !== null;
@@ -240,14 +247,14 @@ function NoteCard({
             borderRadius: t > 0 ? cardRadius * scl * (1 - t) : cardRadius,
             overflow: "hidden",
             cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
-            boxShadow: t > 0
-              ? "none"
+            boxShadow: t > 0 || !shadowReady
+              ? "0 10px 20px -12px rgba(0,0,0,0), 0 32px 40px -8px rgba(0,0,0,0)"
               : isSelected && openProgress < 0.1
                 ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
                 : isHovered
                   ? "0 20px 50px -10px rgba(0,0,0,0.08), 0 50px 140px -15px rgba(0,0,0,0.06)"
-                  : "0 10px 20px -12px rgba(0,0,0,0.15), 0 32px 40px -8px rgba(0,0,0,0.04)",
-            transition: t > 0 ? "none" : "box-shadow 0.15s ease-out",
+                  : "0 10px 20px -12px rgba(0,0,0,0.05), 0 32px 40px -8px rgba(0,0,0,0.02)",
+            transition: "box-shadow 0.2s ease-out",
           }}
           onPointerDown={isResizing ? undefined : (e) => { handlePointerDown(e); }}
         >
