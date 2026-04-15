@@ -117,7 +117,7 @@ function NoteCard({
     openProgress,
     onTap,
     onShiftTap,
-    onDragStart,
+    onDragStart: (noteId: string) => { onInteractionStart(); onDragStart(noteId); },
     onDragMove,
     onDragEnd,
     onDragRotation,
@@ -214,7 +214,7 @@ function NoteCard({
                 ? `rotate(${rotation}deg)`
                 : t > 0
                   ? "none"
-                  : (isSelected || isHovered) && !suppressScale && !isResizing
+                  : isHovered && !isSelected && !suppressScale && !isResizing
                     ? "scale(1.02)"
                     : "none",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
@@ -247,9 +247,9 @@ function NoteCard({
                 : isHovered
                   ? "0 20px 50px -10px rgba(0,0,0,0.08), 0 50px 140px -15px rgba(0,0,0,0.06)"
                   : "0 10px 20px -12px rgba(0,0,0,0.15), 0 32px 40px -8px rgba(0,0,0,0.04)",
-            transition: t > 0 ? "none" : "box-shadow 0.3s ease-out",
+            transition: t > 0 ? "none" : "box-shadow 0.15s ease-out",
           }}
-          onPointerDown={isResizing ? undefined : (e) => { onInteractionStart(); handlePointerDown(e); }}
+          onPointerDown={isResizing ? undefined : (e) => { handlePointerDown(e); }}
         >
         {/* Inner wrapper */}
         <div
