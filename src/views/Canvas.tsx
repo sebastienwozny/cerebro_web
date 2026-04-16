@@ -554,12 +554,10 @@ export default function Canvas() {
     [selectedIds, setSelectedIds]
   );
 
-  // Context menu: right-click on canvas background
+  // Context menu: right-click on canvas background — just prevent default
   const handleCanvasContextMenu = useCallback(
     (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest("[data-notecard]")) return;
       e.preventDefault();
-      setContextMenu({ x: e.clientX, y: e.clientY, noteId: null });
     },
     []
   );
