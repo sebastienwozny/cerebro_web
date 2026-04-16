@@ -24,6 +24,7 @@ interface Props {
   isClosing?: boolean;
   closingScrollOffset: number;
   hoverSuppressed: boolean;
+  spaceHeld: boolean;
   groupDragDelta: { dx: number; dy: number };
   groupDragRotation: number;
   onTap: (noteId: string) => void;
@@ -95,7 +96,7 @@ function CornerHandle({ position, size, strokeColor, visible, resizeHandlers }: 
 
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
   children,
 }: Props) {
@@ -256,7 +257,7 @@ function NoteCard({
                   : "0 10px 20px -12px rgba(0,0,0,0.05), 0 32px 40px -8px rgba(0,0,0,0.02)",
             transition: "box-shadow 0.2s ease-out",
           }}
-          onPointerDown={isResizing ? undefined : (e) => { handlePointerDown(e); }}
+          onPointerDown={isResizing || spaceHeld ? undefined : (e) => { handlePointerDown(e); }}
         >
         {/* Inner wrapper */}
         <div

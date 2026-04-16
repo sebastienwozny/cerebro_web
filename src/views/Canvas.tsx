@@ -729,6 +729,7 @@ export default function Canvas() {
                 openProgress={0}
                 closingScrollOffset={0}
                 hoverSuppressed={marquee !== null || openNoteId !== null}
+                spaceHeld={spaceHeld}
                 groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
                 groupDragRotation={inGroupDrag ? groupDragRotation : 0}
                 onTap={handleCardTap}
@@ -767,6 +768,7 @@ export default function Canvas() {
             isClosing={isClosing}
             closingScrollOffset={closingScrollOffset}
             hoverSuppressed={false}
+                spaceHeld={false}
             groupDragDelta={{ dx: 0, dy: 0 }}
             groupDragRotation={0}
             onTap={NOOP_ID}
