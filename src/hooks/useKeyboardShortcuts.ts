@@ -16,6 +16,8 @@ interface UseKeyboardShortcutsOptions {
   openNote: (id: string) => void;
   reorderSelected: () => void;
   duplicateSelected: () => void;
+  copySelected: () => void;
+  pasteClipboard: () => void;
   onUndo: () => void;
   onRedo: () => void;
   recordAction: (action: CanvasAction) => void;
@@ -34,6 +36,8 @@ export function useKeyboardShortcuts({
   openNote,
   reorderSelected,
   duplicateSelected,
+  copySelected,
+  pasteClipboard,
   onUndo,
   onRedo,
   recordAction,
@@ -74,6 +78,16 @@ export function useKeyboardShortcuts({
       if (e.key === "a" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         selectAll();
+        return;
+      }
+      if (e.key === "c" && (e.metaKey || e.ctrlKey) && selectedIds.size > 0) {
+        e.preventDefault();
+        copySelected();
+        return;
+      }
+      if (e.key === "v" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        pasteClipboard();
         return;
       }
       if (e.key === "d" && (e.metaKey || e.ctrlKey) && selectedIds.size > 0) {
@@ -140,5 +154,5 @@ export function useKeyboardShortcuts({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote, reorderSelected, duplicateSelected, onUndo, onRedo, recordAction]);
+  }, [canvasLocked, closeNote, clearSelection, selectedIds, deleteNote, setSelectedIds, setDeletingIds, selectAll, notes, openNote, reorderSelected, duplicateSelected, copySelected, pasteClipboard, onUndo, onRedo, recordAction]);
 }

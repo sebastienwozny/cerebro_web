@@ -103,7 +103,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
             <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
             <span className="text-[13px] flex-1 text-left">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[11px] text-white/30 ml-4 font-medium">
+              <span className="text-[11px] text-white/40 ml-4 font-semibold tracking-wide">
                 {item.shortcut}
               </span>
             )}

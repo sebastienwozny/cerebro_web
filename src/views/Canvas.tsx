@@ -17,12 +17,9 @@ import NoteEditor from "../components/NoteEditor";
 import NotePreview from "../components/NotePreview";
 import ContextMenu, { MOD, type MenuItem } from "../components/ContextMenu";
 import {
-  MousePointerClick,
   Copy,
   Trash2,
-  Layers,
   LayoutGrid,
-  BoxSelect,
 } from "lucide-react";
 
 const undoStack = new CanvasUndoStack();
@@ -64,7 +61,8 @@ export default function Canvas() {
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; noteId: string | null } | null>(null);
 
-
+  // Clipboard for copy/paste
+  const clipboardRef = useRef<Note[]>([]);
 
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
@@ -257,10 +255,47 @@ export default function Canvas() {
     setSelectedIds(new Set(createdIds));
   }, [notes, selectedIds, duplicateNote, triggerPop, setSelectedIds]);
 
+  // Copy selected cards to clipboard
+  const copySelected = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    clipboardRef.current = notes.filter(n => selectedIds.has(n.id));
+  }, [notes, selectedIds]);
+
+  // Paste cards from clipboard at viewport center
+  const pasteClipboard = useCallback(async () => {
+    const source = clipboardRef.current;
+    if (source.length === 0) return;
+    const t = getTransform();
+    const centerX = -t.offsetX / t.scale;
+    const centerY = -t.offsetY / t.scale;
+    // Compute barycenter of copied cards to offset paste around viewport center
+    const srcCx = source.reduce((s, n) => s + n.positionX, 0) / source.length;
+    const srcCy = source.reduce((s, n) => s + n.positionY, 0) / source.length;
+    const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
+    const createdIds: string[] = [];
+    await db.transaction("rw", db.notes, async () => {
+      let z = maxZ + 1;
+      for (const note of source) {
+        const copy = await duplicateNote(
+          {
+            ...note,
+            positionX: centerX + (note.positionX - srcCx),
+            positionY: centerY + (note.positionY - srcCy),
+          },
+          z++,
+        );
+        createdIds.push(copy.id);
+      }
+    });
+    undoStack.record({ type: "create", noteIds: createdIds });
+    triggerPop(createdIds);
+    setSelectedIds(new Set(createdIds));
+  }, [notes, duplicateNote, triggerPop, setSelectedIds, getTransform]);
+
   useKeyboardShortcuts({
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
     closeNote, clearSelection, selectAll, deleteNote, openNote,
-    reorderSelected, duplicateSelected,
+    reorderSelected, duplicateSelected, copySelected, pasteClipboard,
     onUndo: performUndo, onRedo: performRedo,
     recordAction: undoStack.record.bind(undoStack),
   });
@@ -564,55 +599,32 @@ export default function Canvas() {
     ? contextMenu.noteId
       ? [
           {
-            icon: MousePointerClick,
-            label: "Ouvrir",
-            shortcut: "Entrée",
-            action: () => {
-              const id = [...selectedIds][0];
-              if (id) { clearSelection(); openNote(id); }
-            },
-            hidden: selectedIds.size !== 1,
-          },
-          {
-            icon: Copy,
-            label: "Dupliquer",
-            shortcut: `${MOD}D`,
-            action: duplicateSelected,
-          },
-          {
-            icon: Layers,
-            label: "Premier plan",
-            action: bringSelectedToFront,
-          },
-          {
             icon: LayoutGrid,
-            label: "Aligner",
+            label: "Reorder",
             shortcut: `${MOD}G`,
             action: reorderSelected,
             hidden: selectedIds.size < 2,
           },
           {
-            icon: BoxSelect,
-            label: "Tout sélectionner",
-            shortcut: `${MOD}A`,
-            action: selectAll,
+            icon: Copy,
+            label: "Copy",
+            shortcut: `${MOD}C`,
+            action: copySelected,
+          },
+          {
+            icon: Copy,
+            label: "Duplicate",
+            shortcut: `${MOD}D`,
+            action: duplicateSelected,
           },
           {
             icon: Trash2,
-            label: "Supprimer",
+            label: "Delete",
             shortcut: "⌫",
             action: deleteSelected,
-            danger: true,
           },
         ]
-      : [
-          {
-            icon: BoxSelect,
-            label: "Tout sélectionner",
-            shortcut: `${MOD}A`,
-            action: selectAll,
-          },
-        ]
+      : []
     : [];
 
   const handleCanvasPointerDown = useCallback(
