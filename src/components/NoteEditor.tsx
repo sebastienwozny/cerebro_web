@@ -413,6 +413,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   function handlePlusClick() {
     if (!editor) return;
+    // If current line has content, insert a new empty line below and move cursor there
+    const { $from } = editor.state.selection;
+    const parentEmpty = $from.parent.content.size === 0;
+    if (!parentEmpty) {
+      const blockEnd = $from.after();
+      editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
+    }
     plusIdxRef.current = 0;
     setShowPlusMenu((v) => !v);
   }
