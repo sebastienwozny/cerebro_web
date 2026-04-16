@@ -7,8 +7,8 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
-import { useEffect, useRef, useState } from "react";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -54,6 +54,14 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const [formatTooltips, setFormatTooltips] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInsertPosRef = useRef<number | null>(null);
+
+  // Block handle ("+" button) — appears next to the focused block
+  // Position is relative to the .tiptap container
+  const [handlePos, setHandlePos] = useState<{ top: number } | null>(null);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const plusMenuRef = useRef<HTMLDivElement>(null);
+  const plusBtnRef = useRef<HTMLButtonElement>(null);
+  const plusIdxRef = useRef(0);
 
   const editor = useEditor({
     extensions: [
@@ -338,8 +346,133 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     });
   }
 
+  // ── Block handle ("+" button next to focused block) ──
+
+  const editorWrapRef = useRef<HTMLDivElement>(null);
+
+  // Update handle position when selection changes — relative to .note-editor
+  const updateHandlePos = useCallback(() => {
+    if (!editor || showPlusMenu || !editorWrapRef.current) return;
+    const { $from } = editor.state.selection;
+    const depth = $from.depth;
+    if (depth < 1) { setHandlePos(null); return; }
+    try {
+      const coords = editor.view.coordsAtPos($from.pos);
+      const wrapRect = editorWrapRef.current.getBoundingClientRect();
+      const cy = (coords.top + coords.bottom) / 2 - wrapRect.top;
+      setHandlePos({ top: cy });
+    } catch {
+      setHandlePos(null);
+    }
+  }, [editor, showPlusMenu]);
+
+  useEffect(() => {
+    if (!editor || !editable) { setHandlePos(null); return; }
+    editor.on("selectionUpdate", updateHandlePos);
+    editor.on("update", updateHandlePos);
+    updateHandlePos();
+    return () => {
+      editor.off("selectionUpdate", updateHandlePos);
+      editor.off("update", updateHandlePos);
+    };
+  }, [editor, editable, updateHandlePos]);
+
+  // Close plus menu on click outside or Escape
+  useEffect(() => {
+    if (!showPlusMenu) return;
+    const onClick = (e: MouseEvent) => {
+      if (plusMenuRef.current?.contains(e.target as Node)) return;
+      if (plusBtnRef.current?.contains(e.target as Node)) return;
+      setShowPlusMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.stopPropagation(); setShowPlusMenu(false); return; }
+      if (e.key === "ArrowDown") { e.preventDefault(); plusIdxRef.current = Math.min(plusIdxRef.current + 1, SLASH_COMMANDS.length - 1); highlightPlusItem(); }
+      if (e.key === "ArrowUp") { e.preventDefault(); plusIdxRef.current = Math.max(plusIdxRef.current - 1, 0); highlightPlusItem(); }
+      if (e.key === "Enter") { e.preventDefault(); handlePlusSelect(SLASH_COMMANDS[plusIdxRef.current]); }
+    };
+    // Delay so the opening click doesn't immediately close
+    const timer = setTimeout(() => {
+      window.addEventListener("pointerdown", onClick, true);
+    }, 0);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pointerdown", onClick, true);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  }, [showPlusMenu]);
+
+  function highlightPlusItem() {
+    const menu = plusMenuRef.current;
+    if (!menu) return;
+    menu.querySelectorAll("[data-plus-item]").forEach((el, i) => {
+      (el as HTMLElement).classList.toggle("active", i === plusIdxRef.current);
+    });
+  }
+
+  function handlePlusClick() {
+    if (!editor) return;
+    plusIdxRef.current = 0;
+    setShowPlusMenu((v) => !v);
+  }
+
+  function applyBlockType(cmd: (typeof SLASH_COMMANDS)[number]) {
+    if (!editor) return;
+    const { $from } = editor.state.selection;
+    const parentEmpty = $from.parent.content.size === 0;
+
+    if (parentEmpty) {
+      switch (cmd.type) {
+        case "heading1": editor.chain().focus().setHeading({ level: 1 }).run(); break;
+        case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
+        case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
+        case "bulletList": editor.chain().focus().toggleBulletList().run(); break;
+        case "todo": editor.chain().focus().toggleTaskList().run(); break;
+        case "quote": editor.chain().focus().toggleBlockquote().run(); break;
+        default: editor.chain().focus().setParagraph().run();
+      }
+    } else {
+      const blockEnd = $from.after();
+      editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
+      switch (cmd.type) {
+        case "heading1": editor.chain().focus().setHeading({ level: 1 }).run(); break;
+        case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
+        case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
+        case "bulletList": editor.chain().focus().toggleBulletList().run(); break;
+        case "todo": editor.chain().focus().toggleTaskList().run(); break;
+        case "quote": editor.chain().focus().toggleBlockquote().run(); break;
+        default: break;
+      }
+    }
+  }
+
+  function handlePlusSelect(cmd: (typeof SLASH_COMMANDS)[number]) {
+    if (!editor) return;
+
+    if (cmd.type === "image") {
+      const { $from } = editor.state.selection;
+      const parentEmpty = $from.parent.content.size === 0;
+      if (parentEmpty) {
+        const blockStart = $from.before();
+        const blockEnd = $from.after();
+        imageInsertPosRef.current = blockStart;
+        editor.chain().deleteRange({ from: blockStart, to: blockEnd }).run();
+      } else {
+        const blockEnd = $from.after();
+        editor.chain().insertContentAt(blockEnd, { type: "paragraph" }).run();
+        imageInsertPosRef.current = blockEnd;
+      }
+      fileInputRef.current?.click();
+    } else {
+      applyBlockType(cmd);
+    }
+
+    setShowPlusMenu(false);
+  }
+
   return (
-    <div className="note-editor">
+    <div ref={editorWrapRef} className="note-editor relative">
       <input
         ref={fileInputRef}
         type="file"
@@ -447,8 +580,64 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               </div>
             ))}
           </div>
+
         </>,
         document.body,
+      )}
+
+      {/* Block handle "+" button — positioned inside .note-editor relative to tiptap */}
+      {editable && handlePos && (
+        <button
+          ref={plusBtnRef}
+          className={`absolute flex items-center justify-center border-none cursor-pointer select-none transition-all duration-150 w-6 h-6 rounded-[6px] ${showPlusMenu ? "text-neutral-300 bg-neutral-700" : "text-neutral-400 bg-neutral-200 hover:bg-neutral-300 hover:text-neutral-500"}`}
+          style={{
+            zIndex: 1,
+            left: -40,
+            top: handlePos.top - 12,
+          }}
+          onMouseDown={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handlePlusClick();
+          }}
+        >
+          <Plus className="w-4 h-4" strokeWidth={2} />
+        </button>
+      )}
+
+      {/* Plus menu dropdown */}
+      {editable && showPlusMenu && handlePos && (
+        <div
+          ref={plusMenuRef}
+          className="absolute flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8"
+          style={{
+            zIndex: 2,
+            left: -40,
+            top: handlePos.top + 16,
+            background: "#1a1c1e",
+            boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
+            minWidth: 180,
+          }}
+        >
+          {SLASH_COMMANDS.map((cmd, i) => (
+            <button
+              key={cmd.type}
+              data-plus-item
+              className={`flex items-center px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none text-[13px] transition-colors duration-100 text-neutral-300 hover:bg-white/8 hover:text-white ${i === 0 ? "bg-white/8 text-white" : ""}`}
+              style={{ background: i === 0 ? undefined : "transparent" }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                handlePlusSelect(cmd);
+              }}
+              onMouseEnter={() => {
+                plusIdxRef.current = i;
+                highlightPlusItem();
+              }}
+            >
+              {cmd.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

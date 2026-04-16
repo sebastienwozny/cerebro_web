@@ -150,6 +150,13 @@ html, body, #root {
   to { opacity: 1; }
 }
 
+/* Plus menu / slash menu active item */
+[data-plus-item].active,
+[data-slash-item].active {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
 /* Images in editor */
 .tiptap img {
   width: 100%;
