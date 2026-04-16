@@ -15,6 +15,15 @@ import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 import NotePreview from "../components/NotePreview";
+import ContextMenu, { MOD, type MenuItem } from "../components/ContextMenu";
+import {
+  MousePointerClick,
+  Copy,
+  Trash2,
+  Layers,
+  LayoutGrid,
+  BoxSelect,
+} from "lucide-react";
 
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
@@ -51,6 +60,9 @@ export default function Canvas() {
     popTimerRef.current = setTimeout(() => setPopIds(new Set()), 400);
   }, []);
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; noteId: string | null } | null>(null);
 
 
 
@@ -223,10 +235,32 @@ export default function Canvas() {
     undoStack.record({ type: "move", moves });
   }, [notes, selectedIds]);
 
+  // Duplicate selected cards in place (offset slightly)
+  const duplicateSelected = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    const selected = notes.filter(n => selectedIds.has(n.id));
+    const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
+    const createdIds: string[] = [];
+    const offset = 30;
+    await db.transaction("rw", db.notes, async () => {
+      let z = maxZ + 1;
+      for (const note of selected) {
+        const copy = await duplicateNote(
+          { ...note, positionX: note.positionX + offset, positionY: note.positionY + offset },
+          z++,
+        );
+        createdIds.push(copy.id);
+      }
+    });
+    undoStack.record({ type: "create", noteIds: createdIds });
+    triggerPop(createdIds);
+    setSelectedIds(new Set(createdIds));
+  }, [notes, selectedIds, duplicateNote, triggerPop, setSelectedIds]);
+
   useKeyboardShortcuts({
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
     closeNote, clearSelection, selectAll, deleteNote, openNote,
-    reorderSelected,
+    reorderSelected, duplicateSelected,
     onUndo: performUndo, onRedo: performRedo,
     recordAction: undoStack.record.bind(undoStack),
   });
@@ -471,6 +505,116 @@ export default function Canvas() {
     []
   );
 
+  // Context menu: right-click on card
+  const handleCardContextMenu = useCallback(
+    (e: React.MouseEvent, noteId: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+      // If the card isn't already selected, select it exclusively
+      if (!selectedIds.has(noteId)) {
+        setSelectedIds(new Set([noteId]));
+      }
+      setContextMenu({ x: e.clientX, y: e.clientY, noteId });
+    },
+    [selectedIds, setSelectedIds]
+  );
+
+  // Context menu: right-click on canvas background
+  const handleCanvasContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest("[data-notecard]")) return;
+      e.preventDefault();
+      setContextMenu({ x: e.clientX, y: e.clientY, noteId: null });
+    },
+    []
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Delete selected cards (reused by context menu and keyboard shortcut)
+  const deleteSelected = useCallback(() => {
+    if (selectedIds.size === 0) return;
+    const toDelete = new Set(selectedIds);
+    const snapshots = notes
+      .filter(n => toDelete.has(n.id))
+      .map(snapshotFromNote);
+    undoStack.record({ type: "delete", snapshots });
+    setDeletingIds(toDelete);
+    setSelectedIds(new Set());
+    setTimeout(() => {
+      for (const id of toDelete) deleteNote(id);
+      setDeletingIds(new Set());
+    }, DELETE_DURATION * 1000);
+  }, [notes, selectedIds, setSelectedIds, setDeletingIds, deleteNote]);
+
+  // Bring selected to front
+  const bringSelectedToFront = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
+    let z = maxZ + 1;
+    await db.transaction("rw", db.notes, async () => {
+      for (const id of selectedIds) {
+        await db.notes.update(id, { zOrder: z++ });
+      }
+    });
+  }, [notes, selectedIds]);
+
+  // Build context menu items
+  const contextMenuItems: MenuItem[] = contextMenu
+    ? contextMenu.noteId
+      ? [
+          {
+            icon: MousePointerClick,
+            label: "Ouvrir",
+            shortcut: "Entrée",
+            action: () => {
+              const id = [...selectedIds][0];
+              if (id) { clearSelection(); openNote(id); }
+            },
+            hidden: selectedIds.size !== 1,
+          },
+          {
+            icon: Copy,
+            label: "Dupliquer",
+            shortcut: `${MOD}D`,
+            action: duplicateSelected,
+          },
+          {
+            icon: Layers,
+            label: "Premier plan",
+            action: bringSelectedToFront,
+          },
+          {
+            icon: LayoutGrid,
+            label: "Aligner",
+            shortcut: `${MOD}G`,
+            action: reorderSelected,
+            hidden: selectedIds.size < 2,
+          },
+          {
+            icon: BoxSelect,
+            label: "Tout sélectionner",
+            shortcut: `${MOD}A`,
+            action: selectAll,
+          },
+          {
+            icon: Trash2,
+            label: "Supprimer",
+            shortcut: "⌫",
+            action: deleteSelected,
+            danger: true,
+          },
+        ]
+      : [
+          {
+            icon: BoxSelect,
+            label: "Tout sélectionner",
+            shortcut: `${MOD}A`,
+            action: selectAll,
+          },
+        ]
+    : [];
+
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
       spacePanDown(e);
@@ -496,6 +640,7 @@ export default function Canvas() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onContextMenu={handleCanvasContextMenu}
     >
       {/* Drag-over indicator */}
       {isDragOver && (
@@ -557,6 +702,7 @@ export default function Canvas() {
             <div
               key={note.id}
               data-notecard
+              onContextMenu={(e) => handleCardContextMenu(e, note.id)}
             >
               <NoteCard
                 note={noteForCard}
@@ -706,6 +852,16 @@ export default function Canvas() {
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-lg select-none" style={{ color: "var(--color-text-muted)" }}>
           Double-click to create a note
         </div>
+      )}
+
+      {/* Context menu */}
+      {contextMenu && !canvasLocked && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={closeContextMenu}
+        />
       )}
     </div>
   );
