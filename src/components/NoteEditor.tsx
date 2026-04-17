@@ -259,6 +259,29 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     }
   }, [editor, editable]);
 
+  // Fix: when a drag starts from the drag handle, clear any text selection
+  // so the extension creates a NodeSelection (whole block) instead of a
+  // partial TextSelection covering only bold/italic spans.
+  useEffect(() => {
+    if (!editor || !editable) return;
+
+    const onDragStart = (e: DragEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target?.dataset?.dragHandle && target?.dataset?.dragHandle !== "") return;
+      const { selection } = editor.state;
+      if (!selection.empty && !(selection instanceof NodeSelection)) {
+        // Clear the selection so the extension falls through to NodeSelection
+        const tr = editor.state.tr.setSelection(
+          NodeSelection.create(editor.state.doc, editor.state.selection.$from.before(1))
+        );
+        editor.view.dispatch(tr);
+      }
+    };
+
+    window.addEventListener("dragstart", onDragStart, true);
+    return () => window.removeEventListener("dragstart", onDragStart, true);
+  }, [editor, editable]);
+
   // Click below content to insert empty lines
   useEffect(() => {
     if (!editor || !editable) return;
