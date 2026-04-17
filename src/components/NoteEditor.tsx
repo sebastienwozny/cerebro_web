@@ -316,6 +316,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       // But preserve selection if the user drag-selected from inside the editor
       if (me.clientX < tiptapRect.left || me.clientX > tiptapRect.right) {
         if (!mouseDownInEditor) {
+          // Explicitly collapse any NodeSelection (e.g. clicked image) so the
+          // `.ProseMirror-selectednode` ring disappears. `blur()` alone keeps
+          // the NodeSelection around.
+          if (editor.state.selection instanceof NodeSelection) {
+            editor.commands.setTextSelection(editor.state.selection.from);
+          }
           editor.commands.blur();
           setShowToolbar(false);
           // `blur()` keeps the ProseMirror selection non-empty, so

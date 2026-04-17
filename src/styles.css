@@ -281,6 +281,11 @@ html, body, #root {
   width: 100%;
   display: block;
   margin: 12px 0;
+  border-radius: 6px;
+  transition: box-shadow 150ms;
+}
+.tiptap img.ProseMirror-selectednode {
+  box-shadow: 0 0 0 3px var(--color-selection-border);
 }
 
 /* Image card — fade in text below image on open */
