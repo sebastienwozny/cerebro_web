@@ -867,6 +867,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
             minWidth: 220,
           }}
         >
+          <span className="px-3 pt-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/30">Insert block</span>
           {SLASH_COMMANDS.map((cmd, i) => {
             const meta = {
               text:      { icon: Type,       shortcut: "" },
@@ -883,8 +884,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               <button
                 key={cmd.type}
                 data-plus-item
-                className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 hover:bg-white/8 hover:text-white ${i === 0 ? "bg-white/8 text-white" : ""}`}
-                style={{ background: i === 0 ? undefined : "transparent" }}
+                className="flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 bg-transparent hover:bg-white/8 hover:text-white"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   handlePlusSelect(cmd);
@@ -902,6 +902,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               </button>
             );
           })}
+          <div className="my-1 border-t border-white/8" />
+          <button
+            className="flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 bg-transparent hover:bg-white/8 hover:text-white"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setShowPlusMenu(false);
+            }}
+          >
+            <span className="text-[13px] flex-1 text-left">Close</span>
+            <span className="text-[11px] text-white/40 font-semibold tracking-wide">Esc</span>
+          </button>
         </div>
       )}
     </div>
