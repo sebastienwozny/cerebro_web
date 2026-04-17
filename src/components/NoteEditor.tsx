@@ -760,8 +760,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         <>
           {/* Format bar */}
           <div
-            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 ${(showToolbar || linkMode) && !linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
-            style={{ zIndex: 10002, pointerEvents: (showToolbar && !linkMode) ? "auto" : "none" }}
+            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${(showToolbar && !linkMode) ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100 pointer-events-auto" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0 pointer-events-none"}`}
           >
             {[
               { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
@@ -797,8 +796,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           </div>
           {/* Link bar */}
           <div
-            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
-            style={{ zIndex: 10002, pointerEvents: linkMode ? "auto" : "none" }}
+            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100 pointer-events-auto" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0 pointer-events-none"}`}
           >
             <input
               ref={linkInputRef}
@@ -810,8 +808,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
                 if (e.key === "Escape") { e.preventDefault(); setLinkMode(false); setLinkUrl(""); linkManualRef.current = false; editor?.commands.focus(); }
               }}
               placeholder="Paste link..."
-              className="floating-input h-10 px-3 border-none outline-none text-sm"
-              style={{ width: 220 }}
+              className="floating-input h-10 px-3 border-none outline-none text-sm w-[220px]"
             />
             {[
               { icon: Check, label: "Apply", cmd: () => applyLink() },
@@ -840,12 +837,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {editable && handlePos && (
         <button
           ref={plusBtnRef}
-          className={`drag-handle ${handleHidden || suppressHandles || showPlusMenu ? "hide" : ""}`}
+          className={`drag-handle fixed border-none ${handleHidden || suppressHandles || showPlusMenu ? "hide" : ""}`}
           style={{
-            position: "fixed",
             left: handlePos.left,
             top: handlePos.top,
-            border: "none",
           }}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -861,14 +856,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {editable && showPlusMenu && handlePos && (
         <div
           ref={plusMenuRef}
-          className="floating-menu-dropdown flex flex-col py-1 backdrop-blur-xl rounded-xl"
+          className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-10003 min-w-[300px]"
           style={{
-            position: "fixed",
-            zIndex: 10003,
             left: handlePos.contentLeft,
             top: handlePos.lineBottom + 8,
             transform: menuFlipUp ? `translateY(calc(-100% - ${handlePos.lineH + 16}px))` : undefined,
-            minWidth: 300,
           }}
         >
           <span className="floating-label px-3 pt-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wider">Insert block</span>

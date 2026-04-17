@@ -7,9 +7,6 @@
   --color-card-open: #16181a;
   --color-text-primary: #e8e8e8;
   --color-text-muted: #888;
-  --color-accent: #4a9eff;
-  --color-slash-bg: #252a2e;
-  --color-slash-active: #333a40;
   --color-selection-border: rgba(255, 255, 255, 0.4);
   --color-checkbox-bg: #333;
   --color-checkbox-border: #555;
@@ -56,9 +53,6 @@
     --color-card-open: #f2f2f2;
     --color-text-primary: #1a1a1a;
     --color-text-muted: #666;
-    --color-accent: #0066cc;
-    --color-slash-bg: #fff;
-    --color-slash-active: #eee;
     --color-selection-border: rgba(0, 0, 0, 0.12);
     --color-checkbox-bg: #ededed;
     --color-checkbox-border: #d1d1d1;

@@ -71,26 +71,17 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8"
-      style={{
-        left: x,
-        top: y,
-        zIndex: 10003,
-        background: "#1a1c1e",
-        boxShadow:
-          "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
-        minWidth: 200,
-      }}
+      className="fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10003 min-w-[200px] bg-[#1a1c1e] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3),0_40px_80px_-20px_rgba(0,0,0,0.25)]"
+      style={{ left: x, top: y }}
     >
       {visibleItems.map((item, i) => {
         const Icon = item.icon;
         return (
           <button
             key={i}
-            className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100
+            className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 bg-transparent
               ${item.disabled ? "opacity-40 pointer-events-none" : ""}
               ${item.danger ? "text-red-400 hover:bg-red-500/15" : "text-neutral-300 hover:bg-white/8 hover:text-white"}`}
-            style={{ background: "transparent" }}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();

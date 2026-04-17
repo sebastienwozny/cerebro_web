@@ -638,9 +638,8 @@ export default function Canvas() {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full relative overflow-hidden"
+      className="w-full h-full relative overflow-hidden bg-canvas"
       style={{
-        background: "var(--color-canvas)",
         cursor: spaceHeld ? "grab" : marquee ? "crosshair" : "default",
       }}
       onDoubleClick={handleDoubleClick}
@@ -655,32 +654,25 @@ export default function Canvas() {
       {/* Drag-over indicator */}
       {isDragOver && (
         <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "rgba(74, 158, 255, 0.06)",
-            border: "3px dashed rgba(74, 158, 255, 0.4)",
-            borderRadius: 12,
-            zIndex: 9997,
-          }}
+          className="absolute inset-0 pointer-events-none rounded-xl z-9997 bg-[rgba(74,158,255,0.06)] border-[3px] border-dashed border-[rgba(74,158,255,0.4)]"
         />
       )}
 
       {/* White overlay */}
       {openProgress > 0 && (
         <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ background: "var(--color-card-open)", opacity: openProgress, zIndex: 9998 }}
+          className="absolute inset-0 pointer-events-none bg-card-open z-9998"
+          style={{ opacity: openProgress }}
         />
       )}
 
       {/* Canvas layer */}
       <div
         ref={layerRef}
+        className="absolute origin-top-left"
         style={{
-          position: "absolute",
           left: windowSize.w / 2,
           top: windowSize.h / 2,
-          transformOrigin: "0 0",
         }}
       >
         {notes.map((note) => {
@@ -794,23 +786,19 @@ export default function Canvas() {
       {/* Marquee selection rectangle */}
       {marquee && (
         <div
-          className="absolute pointer-events-none"
+          className="absolute pointer-events-none rounded-sm z-9990 bg-[rgba(74,158,255,0.08)] border border-[rgba(74,158,255,0.3)]"
           style={{
             left: marquee.x,
             top: marquee.y,
             width: marquee.w,
             height: marquee.h,
-            background: "rgba(74, 158, 255, 0.08)",
-            border: "1px solid rgba(74, 158, 255, 0.3)",
-            borderRadius: 4,
-            zIndex: 9990,
           }}
         />
       )}
 
       {/* Add note / image buttons */}
       {!canvasLocked && (
-        <div className="fixed bottom-6 right-6 flex gap-2" style={{ zIndex: 100 }}>
+        <div className="fixed bottom-6 right-6 flex gap-2 z-100">
           <input
             ref={imageInputRef}
             type="file"
@@ -819,12 +807,7 @@ export default function Canvas() {
             onChange={handleImageInput}
           />
           <button
-            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none"
-            style={{
-              background: "var(--color-card)",
-              color: "var(--color-text-muted)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            }}
+            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
             title="Add image"
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={() => imageInputRef.current?.click()}
@@ -836,12 +819,7 @@ export default function Canvas() {
             </svg>
           </button>
           <button
-            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none"
-            style={{
-              background: "var(--color-card)",
-              color: "var(--color-text-muted)",
-              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-            }}
+            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none bg-card text-text-muted shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={async () => {
               const t = getTransform();
@@ -861,7 +839,7 @@ export default function Canvas() {
 
       {/* Empty state */}
       {notes.length === 0 && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-lg select-none" style={{ color: "var(--color-text-muted)" }}>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-lg select-none text-text-muted">
           Double-click to create a note
         </div>
       )}

@@ -73,16 +73,12 @@ function CornerHandle({ position, size, strokeColor, visible, resizeHandlers }: 
 
   return (
     <div
-      className="absolute"
+      className="absolute flex items-center justify-center transition-opacity duration-200 ease-out"
       style={{
         ...posStyle,
         width: size,
         height: size,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
         opacity: visible ? 1 : 0,
-        transition: "opacity 0.2s ease-out",
         pointerEvents: visible ? "auto" : "none",
       }}
       {...resizeHandlers}
@@ -298,23 +294,18 @@ function NoteCard({
 
           {/* Selection border — white inside */}
           <div
-            className="absolute inset-0 pointer-events-none"
+            className="absolute inset-0 pointer-events-none border-4 border-selection-border transition-opacity duration-150 ease-out z-1"
             style={{
               borderRadius: cardRadius,
-              border: "4px solid var(--color-selection-border)",
               opacity: isSelected && openProgress < 0.1 ? 1 : 0,
-              transition: "opacity 0.15s ease-out",
-              zIndex: 1,
             }}
           />
 
           {/* Editor content (card mode — clipped). Image cards: only during close. */}
           {!editing && (!isImageCard || (isClosing && t > 0)) && (
             <div
-              className="absolute inset-0 flex justify-center"
+              className="absolute inset-0 flex justify-center pointer-events-none pt-30"
               style={{
-                pointerEvents: "none",
-                paddingTop: 120,
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
               }}
             >
@@ -360,13 +351,10 @@ function NoteCard({
       {/* Back button */}
       {openProgress > 0 && (
         <button
-          className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm"
+          className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm z-10001 bg-[rgba(128,128,128,0.15)] text-text-muted"
           style={{
-            zIndex: 10001,
             left: lerp(-50, 20, t),
             opacity: t,
-            background: "rgba(128,128,128,0.15)",
-            color: "var(--color-text-muted)",
           }}
           onClick={(e) => {
             e.stopPropagation();
@@ -384,14 +372,7 @@ function NoteCard({
         <div
           ref={scrollRef}
           data-editor-overlay
-          className="fixed inset-0 overflow-y-auto flex justify-center"
-          style={{
-            zIndex: 10000,
-            paddingTop: 120,
-            paddingBottom: 40,
-            paddingLeft: 20,
-            paddingRight: 20,
-          }}
+          className="fixed inset-0 overflow-y-auto flex justify-center z-10000 pt-30 pb-10 px-5"
         >
           <div
             className={isImageCard ? "image-card-open" : undefined}
