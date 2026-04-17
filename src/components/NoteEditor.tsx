@@ -249,6 +249,49 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     return () => window.removeEventListener("dragstart", onDragStart, true);
   }, [editor, editable]);
 
+  // Auto-scroll the editor overlay while dragging a block. The extension's
+  // built-in drag-scroll acts on `window`, which does nothing here since the
+  // scrollable element is `[data-editor-overlay]` inside the note card. We
+  // mirror the behavior with a wider threshold for a comfier drop zone.
+  useEffect(() => {
+    if (!editor || !editable) return;
+    const overlay = editor.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+    if (!overlay) return;
+    const THRESHOLD = 120;
+    const MAX_SPEED = 18;
+    let dragging = false;
+
+    const onDragStart = (e: DragEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || !("dragHandle" in (t.dataset ?? {}))) return;
+      dragging = true;
+    };
+    const onDragEnd = () => { dragging = false; };
+    const onDrag = (e: DragEvent) => {
+      // Last `drag` event in a sequence often has clientY = 0 — skip it.
+      if (!dragging || e.clientY === 0) return;
+      const rect = overlay.getBoundingClientRect();
+      const topDist = e.clientY - rect.top;
+      const bottomDist = rect.bottom - e.clientY;
+      if (topDist < THRESHOLD && topDist >= 0) {
+        const factor = 1 - topDist / THRESHOLD;
+        overlay.scrollTop -= MAX_SPEED * factor;
+      } else if (bottomDist < THRESHOLD && bottomDist >= 0) {
+        const factor = 1 - bottomDist / THRESHOLD;
+        overlay.scrollTop += MAX_SPEED * factor;
+      }
+    };
+
+    window.addEventListener("dragstart", onDragStart, true);
+    window.addEventListener("dragend", onDragEnd, true);
+    window.addEventListener("drag", onDrag);
+    return () => {
+      window.removeEventListener("dragstart", onDragStart, true);
+      window.removeEventListener("dragend", onDragEnd, true);
+      window.removeEventListener("drag", onDrag);
+    };
+  }, [editor, editable]);
+
   // Click below content to insert empty lines
   useEffect(() => {
     if (!editor || !editable) return;
