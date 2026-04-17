@@ -217,7 +217,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (editable) {
         const hasHeaderImage = editor.getJSON().content?.[0]?.type === "image";
         if (hasHeaderImage) {
-          editor.commands.blur();
+          // Collapse any NodeSelection before blurring — without this the
+          // header image stays marked .ProseMirror-selectednode on open.
+          editor.chain().setTextSelection(0).blur().run();
         } else {
           editor.commands.setTextSelection(0);
           (editor.view.dom as HTMLElement).focus({ preventScroll: true });

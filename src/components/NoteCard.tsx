@@ -413,7 +413,9 @@ function NoteCard({
               objectFit: "cover",
               zIndex: 10001,
               pointerEvents: "none",
-              borderRadius: lerp(cardRadius * scale, 0, t),
+              // Target 6px to match `.tiptap img` border-radius so the hero
+              // lands on the editor image without a visible radius snap.
+              borderRadius: lerp(cardRadius * scale, 6, t),
             }}
             draggable={false}
           />,
