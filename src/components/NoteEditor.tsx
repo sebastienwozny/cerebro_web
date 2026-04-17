@@ -11,12 +11,14 @@ import Underline from "@tiptap/extension-underline";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus, Type, Heading1, Heading2, Heading3, List, ListChecks, Quote, ImageIcon } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
 import { SLASH_COMMANDS } from "../lib/slashCommands";
 import { readImageFile } from "../lib/imageUtils";
+import FormatToolbar from "./FormatToolbar";
+import PlusMenu from "./PlusMenu";
 
 // Extend Tiptap Image to carry aspect ratio
 const ImageWithAspect = BaseImage.extend({
@@ -782,79 +784,26 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       <EditorContent editor={editor} />
       {/* Floating toolbars — rendered via portal so fixed positioning works */}
       {editable && createPortal(
-        <>
-          {/* Format bar */}
-          <div
-            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${(showToolbar && !linkMode) ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100 pointer-events-auto" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0 pointer-events-none"}`}
-          >
-            {[
-              { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
-              { icon: Italic, label: "Italic", cmd: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic"), shortcut: "⌘I" },
-              { icon: UnderlineIcon, label: "Underline", cmd: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline"), shortcut: "⌘U" },
-              { icon: Strikethrough, label: "Strikethrough", cmd: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike"), shortcut: "⌘⇧X" },
-              { icon: Link2, label: "Link", cmd: () => enterLinkMode(), active: editor?.isActive("link"), shortcut: "⌘K" },
-            ].map(({ icon: Icon, label, cmd, active, shortcut }, i) => (
-              <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setFormatTooltips(true)}>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                  className={`floating-btn ${active ? "is-active" : ""} w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none`}
-                >
-                  <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
-                </button>
-                <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg flex items-center gap-2`}>
-                  <span>{label}</span>
-                  <span className="shortcut">{shortcut}</span>
-                </div>
-              </div>
-            ))}
-            <div className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110" onMouseLeave={() => setFormatTooltips(true)}>
-              <button
-                onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
-                className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
-              >
-                <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
-              </button>
-              <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
-                Clear
-              </div>
-            </div>
-          </div>
-          {/* Link bar */}
-          <div
-            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100 pointer-events-auto" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0 pointer-events-none"}`}
-          >
-            <input
-              ref={linkInputRef}
-              type="text"
-              value={linkUrl}
-              onChange={(e) => setLinkUrl(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); applyLink(); }
-                if (e.key === "Escape") { e.preventDefault(); setLinkMode(false); setLinkUrl(""); linkManualRef.current = false; editor?.commands.focus(); }
-              }}
-              placeholder="Paste link..."
-              className="floating-input h-10 px-3 border-none outline-none text-sm w-[220px]"
-            />
-            {[
-              { icon: Check, label: "Apply", cmd: () => applyLink() },
-              { icon: ExternalLink, label: "Open", cmd: () => { if (linkUrl.trim()) { const href = /^https?:\/\//.test(linkUrl.trim()) ? linkUrl.trim() : `https://${linkUrl.trim()}`; window.open(href, "_blank"); } } },
-              { icon: Unlink, label: "Unlink", cmd: () => removeLink() },
-            ].map(({ icon: Icon, label, cmd }, i) => (
-              <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setLinkTooltips(true)}>
-                <button
-                  onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                  className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
-                >
-                  <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
-                </button>
-                <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${linkTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
-                  {label}
-                </div>
-              </div>
-            ))}
-          </div>
-
-        </>,
+        <FormatToolbar
+          ref={linkInputRef}
+          editor={editor}
+          visible={showToolbar}
+          linkMode={linkMode}
+          linkUrl={linkUrl}
+          formatTooltips={formatTooltips}
+          linkTooltips={linkTooltips}
+          onEnterLinkMode={enterLinkMode}
+          onApplyLink={applyLink}
+          onRemoveLink={removeLink}
+          onLinkUrlChange={setLinkUrl}
+          onExitLinkMode={() => {
+            setLinkMode(false);
+            setLinkUrl("");
+            linkManualRef.current = false;
+          }}
+          onSetFormatTooltips={setFormatTooltips}
+          onSetLinkTooltips={setLinkTooltips}
+        />,
         document.body,
       )}
 
@@ -882,67 +831,19 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {/* Plus menu dropdown — portaled so it escapes NoteCard's stacking
           context (z-9999) and sits above every other UI layer. */}
       {editable && showPlusMenu && handlePos && createPortal(
-        <div
+        <PlusMenu
           ref={plusMenuRef}
-          className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-10005 min-w-[300px]"
-          style={{
-            left: handlePos.contentLeft,
-            top: handlePos.lineBottom + 8,
-            transform: menuFlipUp ? `translateY(calc(-100% - ${handlePos.lineH + 16}px))` : undefined,
+          contentLeft={handlePos.contentLeft}
+          lineBottom={handlePos.lineBottom}
+          lineH={handlePos.lineH}
+          flipUp={menuFlipUp}
+          onSelect={handlePlusSelect}
+          onClose={() => setShowPlusMenu(false)}
+          onHoverItem={(i) => {
+            plusIdxRef.current = i;
+            highlightPlusItem();
           }}
-        >
-          <span className="floating-label px-3 pt-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wider">Insert block</span>
-          {SLASH_COMMANDS.map((cmd, i) => {
-            const meta = {
-              text:      { icon: Type,       shortcut: "" },
-              heading1:  { icon: Heading1,   shortcut: "#" },
-              heading2:  { icon: Heading2,   shortcut: "##" },
-              heading3:  { icon: Heading3,   shortcut: "###" },
-              bulletList:{ icon: List,        shortcut: "-" },
-              todo:      { icon: ListChecks,  shortcut: "[]" },
-              quote:     { icon: Quote,       shortcut: ">" },
-              image:     { icon: ImageIcon,   shortcut: "/image" },
-            }[cmd.type] ?? { icon: Type, shortcut: "" };
-            const Icon = meta.icon;
-            return (
-              <button
-                key={cmd.type}
-                data-plus-item
-                className="floating-item flex items-center gap-3 px-3 py-1.5 mx-1 rounded-lg border-none cursor-pointer select-none"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handlePlusSelect(cmd);
-                }}
-                onMouseEnter={() => {
-                  plusIdxRef.current = i;
-                  highlightPlusItem();
-                }}
-              >
-                <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
-                <span className="text-[14px] flex-1 text-left">{cmd.label}</span>
-                {meta.shortcut && (
-                  <span className="floating-shortcut text-[11px] ml-4 font-semibold tracking-wide">{meta.shortcut}</span>
-                )}
-              </button>
-            );
-          })}
-          <div className="floating-divider my-1" />
-          <button
-            data-plus-item
-            className="floating-item flex items-center gap-3 px-3 py-1.5 mx-1 rounded-lg border-none cursor-pointer select-none"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setShowPlusMenu(false);
-            }}
-            onMouseEnter={() => {
-              plusIdxRef.current = SLASH_COMMANDS.length;
-              highlightPlusItem();
-            }}
-          >
-            <span className="text-[14px] flex-1 text-left">Close</span>
-            <span className="floating-shortcut text-[11px] font-semibold tracking-wide">Esc</span>
-          </button>
-        </div>,
+        />,
         document.body,
       )}
     </div>
