@@ -287,18 +287,31 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!editor || !editable) return;
     const overlay = editor.view.dom.closest("[data-editor-overlay]");
     if (!overlay) return;
+
+    // Track whether mousedown started inside the editor text area
+    let mouseDownInEditor = false;
+    const handleOverlayPointerDown = (e: Event) => {
+      const me = e as MouseEvent;
+      const tiptapRect = editor.view.dom.getBoundingClientRect();
+      mouseDownInEditor = me.clientX >= tiptapRect.left && me.clientX <= tiptapRect.right;
+    };
+    overlay.addEventListener("pointerdown", handleOverlayPointerDown);
+
     const handleOverlayClick = (e: Event) => {
       const me = e as MouseEvent;
       const tiptap = editor.view.dom;
       const tiptapRect = tiptap.getBoundingClientRect();
 
       // Click in left/right margins — clear selection and close toolbars
+      // But preserve selection if the user drag-selected from inside the editor
       if (me.clientX < tiptapRect.left || me.clientX > tiptapRect.right) {
-        editor.commands.blur();
-        setShowToolbar(false);
-        setLinkMode(false);
-        setLinkUrl("");
-        linkManualRef.current = false;
+        if (!mouseDownInEditor) {
+          editor.commands.blur();
+          setShowToolbar(false);
+          setLinkMode(false);
+          setLinkUrl("");
+          linkManualRef.current = false;
+        }
         return;
       }
 
@@ -321,7 +334,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       editor.chain().insertContentAt(endPos, paragraphs).focus("end").run();
     };
     overlay.addEventListener("click", handleOverlayClick);
-    return () => overlay.removeEventListener("click", handleOverlayClick);
+    return () => {
+      overlay.removeEventListener("click", handleOverlayClick);
+      overlay.removeEventListener("pointerdown", handleOverlayPointerDown);
+    };
   }, [editor, editable]);
 
   useEffect(() => {
