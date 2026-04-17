@@ -63,7 +63,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number; lineH: number; lineBottom: number } | null>(null);
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
   const [handleHidden, setHandleHidden] = useState(true);
-  const [suppressHandles, setSuppressHandles] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [menuFlipUp, setMenuFlipUp] = useState(false);
@@ -441,7 +440,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     };
 
     const onMove = (e: MouseEvent) => {
-      if (showPlusMenu || suppressHandles || hasSelection) return;
+      if (showPlusMenu || hasSelection) return;
       const probeX = e.clientX + 50 + DRAG_WIDTH;
       const probeY = e.clientY;
       const found = document
@@ -483,7 +482,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     // tiptap) also triggers the handles for the row at cursor y.
     const MARGIN_BAND = 120; // px to the left of tiptap where handles react
     const onMarginMove = (e: MouseEvent) => {
-      if (showPlusMenu || suppressHandles || hasSelection) return;
+      if (showPlusMenu || hasSelection) return;
       const tiptapRect = tiptap.getBoundingClientRect();
       if (e.clientX >= tiptapRect.left) return; // right of tiptap → onMove handles it
       if (e.clientX < tiptapRect.left - MARGIN_BAND) return;
@@ -531,7 +530,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       tiptap.removeEventListener("mousemove", onMove);
       window.removeEventListener("mousemove", onMarginMove);
     };
-  }, [editor, editable, showPlusMenu, suppressHandles, hasSelection]);
+  }, [editor, editable, showPlusMenu, hasSelection]);
 
   // Keep the handles (and menu when open) anchored to the hovered block when
   // any ancestor scrolls or the viewport resizes. Runs whenever a block is
@@ -561,31 +560,21 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     setMenuFlipUp(handlePos.lineBottom + 8 + h > viewportH - 8);
   }, [showPlusMenu, handlePos]);
 
-  // Reset suppression when mouse leaves the editor area so handles come back on re-entry
-  useEffect(() => {
-    if (!editor || !editable) return;
-    const wrap = editorWrapRef.current;
-    if (!wrap) return;
-    const onLeave = () => setSuppressHandles(false);
-    wrap.addEventListener("mouseleave", onLeave);
-    return () => wrap.removeEventListener("mouseleave", onLeave);
-  }, [editor, editable]);
-
-  // Force-hide the extension's drag handle while suppressed, while the "+" menu
-  // is open, or while the user has a text selection (so the format toolbar
-  // isn't fighting for attention with the block handles).
+  // Force-hide the extension's drag handle while the "+" menu is open or while
+  // the user has a text selection (so the format toolbar isn't fighting for
+  // attention with the block handles).
   useEffect(() => {
     const parent = editor?.view.dom.parentElement;
     const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
     if (!dragEl) return;
-    if (suppressHandles || showPlusMenu || hasSelection) {
+    if (showPlusMenu || hasSelection) {
       dragEl.style.opacity = "0";
       dragEl.style.pointerEvents = "none";
     } else {
       dragEl.style.opacity = "";
       dragEl.style.pointerEvents = "";
     }
-  }, [suppressHandles, showPlusMenu, hasSelection, editor]);
+  }, [showPlusMenu, hasSelection, editor]);
 
   // When the plus menu closes OR a text selection is cleared, clear the stored
   // handle position so our "+" hides until the next mousemove (which
@@ -765,12 +754,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     // branch (e.g. selecting "Bullet List" while already in one).
     editor.commands.focus();
     setShowPlusMenu(false);
-    // Note: we intentionally do NOT set `suppressHandles` here. The
-    // menu-close effect (`prevShowPlusRef`) already clears `handlePos` and
-    // hides the extension drag handle, so the handles won't flash on the
-    // just-inserted block. Setting `suppressHandles` would also block the
-    // next mousemove from restoring the handles until the cursor leaves the
-    // editor wrapper — which breaks hover after selecting a slash command.
   }
 
   return (
@@ -818,7 +801,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {editable && (
         <button
           ref={plusBtnRef}
-          className={`drag-handle fixed border-none ${!handlePos || handleHidden || suppressHandles || showPlusMenu || hasSelection ? "hide" : ""}`}
+          className={`drag-handle fixed border-none ${!handlePos || handleHidden || showPlusMenu || hasSelection ? "hide" : ""}`}
           style={{
             left: handlePos?.left ?? 0,
             top: handlePos?.top ?? 0,
