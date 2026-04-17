@@ -1,6 +1,6 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { DOMParser } from "@tiptap/pm/model";
-import { NodeSelection } from "@tiptap/pm/state";
+import { NodeSelection, TextSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -58,7 +58,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   // Block handle ("+" button) — appears on hover next to the hovered block
   // Position is in viewport coordinates (position: fixed)
-  const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number; lineH: number } | null>(null);
+  const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number; lineH: number; lineBottom: number } | null>(null);
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
   const [handleHidden, setHandleHidden] = useState(true);
   const [suppressHandles, setSuppressHandles] = useState(false);
@@ -96,7 +96,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         dragHandleWidth: 36,
         scrollTreshold: 100,
       }),
-      AutoJoiner,
+      AutoJoiner.configure({
+        elementsToJoin: ["bulletList", "orderedList", "taskList"],
+      }),
     ],
     content: initialHtml.current,
     editable,
@@ -377,32 +379,51 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       }
       const dragLeft = rect.left - DRAG_WIDTH;
       const plusLeft = dragLeft - 24 - 4;
-      let contentLeft = rect.left;
-      if (found.matches("ul:not([data-type=taskList]) li, ol li")) {
-        contentLeft = rect.left + 24;
-      } else if (found.matches('ul[data-type="taskList"] li')) {
-        contentLeft = rect.left + 26;
-      }
-      return { top, plusLeft, contentLeft, dragLeft, lineHeight };
+      // For list items, `rect.left` is the bullet/checkbox's left (they're
+      // flex children of the li), so aligning the menu with it puts the menu
+      // under the marker — matching how paragraphs land on their own text left.
+      const contentLeft = rect.left;
+      // Bottom of the block's first line — used to anchor the menu directly
+      // below the cursor's line regardless of the block's font-size.
+      const lineBottom = rect.top + paddingTop + lineHeight;
+      return { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom };
     };
 
     const syncDragHandle = (dragLeft: number, top: number) => {
-      requestAnimationFrame(() => {
-        const parent = tiptap.parentElement;
-        const dragEl = parent?.querySelector(
-          ".drag-handle[data-drag-handle]",
-        ) as HTMLElement | null;
-        if (dragEl) {
-          dragEl.style.left = `${dragLeft}px`;
-          dragEl.style.top = `${top}px`;
-        }
-      });
+      // Synchronous (no rAF) so the drag handle and our "+" land on the same
+      // row in the same mousemove tick. With rAF, fast movement can leave the
+      // drag handle on the previous frame's position while our "+" has already
+      // moved via React state — visible as a 1-row offset in frame-by-frame.
+      const parent = tiptap.parentElement;
+      const dragEl = parent?.querySelector(
+        ".drag-handle[data-drag-handle]",
+      ) as HTMLElement | null;
+      if (dragEl) {
+        dragEl.style.left = `${dragLeft}px`;
+        dragEl.style.top = `${top}px`;
+      }
+    };
+
+    const syncPlusButton = (plusLeft: number, top: number) => {
+      // Mirror "+" position imperatively — React re-render would add another
+      // frame of lag vs the drag handle (which we position synchronously).
+      const plusBtn = plusBtnRef.current;
+      if (plusBtn) {
+        plusBtn.style.left = `${plusLeft}px`;
+        plusBtn.style.top = `${top}px`;
+      }
     };
 
     computeFromBlockRef.current = (found: HTMLElement) => {
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
+      syncPlusButton(plusLeft, top);
+      const menu = plusMenuRef.current;
+      if (menu) {
+        menu.style.left = `${contentLeft}px`;
+        menu.style.top = `${lineBottom + 8}px`;
+      }
     };
 
     const onMove = (e: MouseEvent) => {
@@ -421,14 +442,25 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (!found) return;
 
       hoveredBlockRef.current = found;
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
+      syncPlusButton(plusLeft, top);
+      // Show our "+" synchronously so its fade-in matches the extension's
+      // drag handle (which toggles its `hide` class via direct DOM in this
+      // same mousemove tick — going through React state would lag by a frame).
+      plusBtnRef.current?.classList.remove("hide");
+      setHandleHidden(false);
 
       const result = editor.view.posAtCoords({ left: probeX, top: probeY });
       if (result) {
         const $p = editor.state.doc.resolve(result.pos);
-        setHandleBlockPos($p.end());
+        // `TextSelection.near` snaps to the nearest valid text position, so its
+        // `$anchor` is guaranteed to sit inside a textblock (paragraph, heading,
+        // etc.). Without this, probing over a list item's right edge can yield
+        // a position on the <li> boundary — invalid for setTextSelection.
+        const near = TextSelection.near($p);
+        setHandleBlockPos(near.$anchor.end());
       }
     };
 
@@ -454,22 +486,28 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (!found) return;
 
       hoveredBlockRef.current = found;
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
+      syncPlusButton(plusLeft, top);
       // Extension hides its drag handle on tiptap mouseout; force-show while
       // we're anchored to a block in the margin band.
-      requestAnimationFrame(() => {
-        const dragEl = tiptap.parentElement?.querySelector(
-          ".drag-handle[data-drag-handle]",
-        ) as HTMLElement | null;
-        dragEl?.classList.remove("hide");
-      });
+      const dragEl = tiptap.parentElement?.querySelector(
+        ".drag-handle[data-drag-handle]",
+      ) as HTMLElement | null;
+      dragEl?.classList.remove("hide");
+      plusBtnRef.current?.classList.remove("hide");
+      setHandleHidden(false);
 
       const result = editor.view.posAtCoords({ left: probeX, top: probeY });
       if (result) {
         const $p = editor.state.doc.resolve(result.pos);
-        setHandleBlockPos($p.end());
+        // `TextSelection.near` snaps to the nearest valid text position, so its
+        // `$anchor` is guaranteed to sit inside a textblock (paragraph, heading,
+        // etc.). Without this, probing over a list item's right edge can yield
+        // a position on the <li> boundary — invalid for setTextSelection.
+        const near = TextSelection.near($p);
+        setHandleBlockPos(near.$anchor.end());
       }
     };
 
@@ -481,9 +519,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     };
   }, [editor, editable, showPlusMenu, suppressHandles]);
 
-  // Keep the menu anchored to the hovered block when any ancestor scrolls or on resize.
+  // Keep the handles (and menu when open) anchored to the hovered block when
+  // any ancestor scrolls or the viewport resizes. Runs whenever a block is
+  // tracked — not only when the menu is open — so on resize the + and drag
+  // handle don't drift away from the row under the cursor.
   useEffect(() => {
-    if (!showPlusMenu) return;
     const update = () => {
       const block = hoveredBlockRef.current;
       if (!block || !block.isConnected) return;
@@ -495,7 +535,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       window.removeEventListener("scroll", update, true);
       window.removeEventListener("resize", update);
     };
-  }, [showPlusMenu]);
+  }, []);
 
   // Flip menu above the line when it would overflow the viewport bottom.
   useLayoutEffect(() => {
@@ -504,7 +544,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!el) return;
     const h = el.offsetHeight;
     const viewportH = window.innerHeight;
-    setMenuFlipUp(handlePos.top + h > viewportH - 8);
+    setMenuFlipUp(handlePos.lineBottom + 8 + h > viewportH - 8);
   }, [showPlusMenu, handlePos]);
 
   // Reset suppression when mouse leaves the editor area so handles come back on re-entry
@@ -530,6 +570,19 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       dragEl.style.pointerEvents = "";
     }
   }, [suppressHandles, showPlusMenu, editor]);
+
+  // When the plus menu closes, clear the stored handle position so our "+" hides
+  // until the next mousemove (which repositions it against the hovered block).
+  // Without this, after inserting and closing, the "+" stays frozen on the new
+  // line while the extension's drag handle follows the cursor elsewhere.
+  const prevShowPlusRef = useRef(false);
+  useEffect(() => {
+    if (prevShowPlusRef.current && !showPlusMenu) {
+      setHandlePos(null);
+      hoveredBlockRef.current = null;
+    }
+    prevShowPlusRef.current = showPlusMenu;
+  }, [showPlusMenu]);
 
   // Mirror the drag handle's `hide` class onto our "+" so both fade together
   useEffect(() => {
@@ -565,10 +618,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       setShowPlusMenu(false);
     };
     const onKey = (e: KeyboardEvent) => {
+      // Close button is the last item (index === SLASH_COMMANDS.length).
+      const maxIdx = SLASH_COMMANDS.length;
       if (e.key === "Escape") { e.stopPropagation(); setShowPlusMenu(false); return; }
-      if (e.key === "ArrowDown") { e.preventDefault(); plusIdxRef.current = Math.min(plusIdxRef.current + 1, SLASH_COMMANDS.length - 1); highlightPlusItem(); }
+      if (e.key === "ArrowDown") { e.preventDefault(); plusIdxRef.current = Math.min(plusIdxRef.current + 1, maxIdx); highlightPlusItem(); }
       if (e.key === "ArrowUp") { e.preventDefault(); plusIdxRef.current = Math.max(plusIdxRef.current - 1, 0); highlightPlusItem(); }
-      if (e.key === "Enter") { e.preventDefault(); handlePlusSelect(SLASH_COMMANDS[plusIdxRef.current]); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (plusIdxRef.current === maxIdx) setShowPlusMenu(false);
+        else handlePlusSelect(SLASH_COMMANDS[plusIdxRef.current]);
+      }
     };
     // Delay so the opening click doesn't immediately close
     const timer = setTimeout(() => {
@@ -592,15 +651,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   function handlePlusClick() {
     if (!editor) return;
-    // Move selection into the hovered block so the menu acts on that block
     if (handleBlockPos !== null) {
       editor.chain().focus().setTextSelection(handleBlockPos).run();
     }
-    // If current line has content, insert a new empty line below and move cursor there
     const { $from } = editor.state.selection;
     const parentEmpty = $from.parent.content.size === 0;
     if (!parentEmpty) {
-      // Detect if we're inside a list/task item so we create a new item rather than a second paragraph within the same item
       let liType: "listItem" | "taskItem" | null = null;
       for (let d = $from.depth; d > 0; d--) {
         const name = $from.node(d).type.name;
@@ -609,22 +665,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (liType) {
         editor.chain().focus().splitListItem(liType).run();
       } else {
-        const blockEnd = $from.after();
+        const blockEnd = $from.after(1);
         editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
       }
-      // Re-anchor "+" (and dropdown) to the newly inserted line
-      try {
-        const coords = editor.view.coordsAtPos(editor.state.selection.$from.pos);
-        const top = coords.top + (coords.bottom - coords.top - 24) / 2;
-        setHandlePos((prev) => (prev ? { ...prev, top } : null));
-        // Update hovered block ref so scroll-tracking follows the new line
-        const dom = editor.view.domAtPos(editor.state.selection.$from.pos).node;
-        const el = (dom instanceof HTMLElement ? dom : dom.parentElement) as HTMLElement | null;
-        if (el) {
-          const blockEl = el.closest("li, p, pre, blockquote, h1, h2, h3, h4, h5, h6") as HTMLElement | null;
-          if (blockEl) hoveredBlockRef.current = blockEl;
-        }
-      } catch { /* noop */ }
+      const pos = editor.state.selection.$from.pos;
+      const dom = editor.view.domAtPos(pos).node;
+      const el = (dom instanceof HTMLElement ? dom : dom.parentElement) as HTMLElement | null;
+      const topLevel = el?.closest('ul > li, ol > li, .tiptap > *') as HTMLElement | null;
+      if (topLevel) {
+        hoveredBlockRef.current = topLevel;
+        computeFromBlockRef.current?.(topLevel);
+      }
     }
     plusIdxRef.current = 0;
     setShowPlusMenu((v) => !v);
@@ -640,9 +691,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         case "heading1": editor.chain().focus().setHeading({ level: 1 }).run(); break;
         case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
         case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
-        case "bulletList": editor.chain().focus().toggleBulletList().run(); break;
-        case "todo": editor.chain().focus().toggleTaskList().run(); break;
-        case "quote": editor.chain().focus().toggleBlockquote().run(); break;
+        // `toggle*` would convert back to a paragraph if we're already inside
+        // the target list/quote (e.g. after splitListItem from handlePlusClick).
+        case "bulletList": if (!editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run(); break;
+        case "todo": if (!editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run(); break;
+        case "quote": if (!editor.isActive("blockquote")) editor.chain().focus().toggleBlockquote().run(); break;
         default: editor.chain().focus().setParagraph().run();
       }
     } else {
@@ -681,6 +734,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       applyBlockType(cmd);
     }
 
+    // Ensure the editor keeps focus even when applyBlockType takes a no-op
+    // branch (e.g. selecting "Bullet List" while already in one).
+    editor.commands.focus();
     setShowPlusMenu(false);
     setSuppressHandles(true);
   }
@@ -704,8 +760,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         <>
           {/* Format bar */}
           <div
-            className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${(showToolbar || linkMode) && !linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
-            style={{ zIndex: 10002, background: "#1a1c1e", pointerEvents: (showToolbar && !linkMode) ? "auto" : "none", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 ${(showToolbar || linkMode) && !linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
+            style={{ zIndex: 10002, pointerEvents: (showToolbar && !linkMode) ? "auto" : "none" }}
           >
             {[
               { icon: Bold, label: "Bold", cmd: () => editor?.chain().focus().toggleBold().run(), active: editor?.isActive("bold"), shortcut: "⌘B" },
@@ -717,32 +773,32 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setFormatTooltips(true)}>
                 <button
                   onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                  className={`w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none transition-colors duration-150 ${active ? "text-white bg-[#333] dark:bg-neutral-800" : "text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800"}`}
+                  className={`floating-btn ${active ? "is-active" : ""} w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none`}
                 >
                   <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
                 </button>
-                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8 flex items-center gap-2`}>
+                <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg flex items-center gap-2`}>
                   <span>{label}</span>
-                  <span className="text-white/60">{shortcut}</span>
+                  <span className="shortcut">{shortcut}</span>
                 </div>
               </div>
             ))}
             <div className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110" onMouseLeave={() => setFormatTooltips(true)}>
               <button
                 onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
-                className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
+                className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
               >
                 <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
               </button>
-              <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8`}>
+              <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
                 Clear
               </div>
             </div>
           </div>
           {/* Link bar */}
           <div
-            className={`fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl border border-white/8 transition-all duration-300 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
-            style={{ zIndex: 10002, background: "#1a1c1e", pointerEvents: linkMode ? "auto" : "none", boxShadow: "0 -10px 40px -10px rgba(0,0,0,0.15), 0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25), 0 70px 140px -30px rgba(0,0,0,0.2), 0 120px 240px -40px rgba(0,0,0,0.15)" }}
+            className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 ${linkMode ? "ease-[cubic-bezier(0,0,0.35,1)] bottom-10 scale-100 opacity-100" : "ease-[cubic-bezier(0.65,0,1,1)] -bottom-24 scale-80 opacity-0"}`}
+            style={{ zIndex: 10002, pointerEvents: linkMode ? "auto" : "none" }}
           >
             <input
               ref={linkInputRef}
@@ -754,7 +810,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
                 if (e.key === "Escape") { e.preventDefault(); setLinkMode(false); setLinkUrl(""); linkManualRef.current = false; editor?.commands.focus(); }
               }}
               placeholder="Paste link..."
-              className="h-10 px-3 bg-transparent border-none outline-none text-sm text-white placeholder-neutral-500"
+              className="floating-input h-10 px-3 border-none outline-none text-sm"
               style={{ width: 220 }}
             />
             {[
@@ -765,11 +821,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               <div key={i} className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108" onMouseLeave={() => setLinkTooltips(true)}>
                 <button
                   onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                  className="w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none text-neutral-300 bg-transparent hover:bg-[#333] hover:text-white dark:hover:bg-neutral-800 transition-colors duration-150"
+                  className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
                 >
                   <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
                 </button>
-                <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${linkTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg bg-neutral-800 text-white/90 border border-white/8`}>
+                <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${linkTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
                   {label}
                 </div>
               </div>
@@ -805,19 +861,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {editable && showPlusMenu && handlePos && (
         <div
           ref={plusMenuRef}
-          className="flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8"
+          className="floating-menu-dropdown flex flex-col py-1 backdrop-blur-xl rounded-xl"
           style={{
             position: "fixed",
             zIndex: 10003,
             left: handlePos.contentLeft,
-            top: handlePos.top + handlePos.lineH,
-            transform: menuFlipUp ? `translateY(calc(-100% - ${handlePos.lineH * 2}px))` : undefined,
-            background: "#1a1c1e",
-            boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
-            minWidth: 220,
+            top: handlePos.lineBottom + 8,
+            transform: menuFlipUp ? `translateY(calc(-100% - ${handlePos.lineH + 16}px))` : undefined,
+            minWidth: 300,
           }}
         >
-          <span className="px-3 pt-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/30">Insert block</span>
+          <span className="floating-label px-3 pt-2.5 pb-2 text-[11px] font-semibold uppercase tracking-wider">Insert block</span>
           {SLASH_COMMANDS.map((cmd, i) => {
             const meta = {
               text:      { icon: Type,       shortcut: "" },
@@ -834,7 +888,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
               <button
                 key={cmd.type}
                 data-plus-item
-                className="flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 bg-transparent hover:bg-white/8 hover:text-white"
+                className="floating-item flex items-center gap-3 px-3 py-1.5 mx-1 rounded-lg border-none cursor-pointer select-none"
                 onMouseDown={(e) => {
                   e.preventDefault();
                   handlePlusSelect(cmd);
@@ -845,23 +899,28 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
                 }}
               >
                 <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
-                <span className="text-[13px] flex-1 text-left">{cmd.label}</span>
+                <span className="text-[14px] flex-1 text-left">{cmd.label}</span>
                 {meta.shortcut && (
-                  <span className="text-[11px] text-white/40 ml-4 font-semibold tracking-wide">{meta.shortcut}</span>
+                  <span className="floating-shortcut text-[11px] ml-4 font-semibold tracking-wide">{meta.shortcut}</span>
                 )}
               </button>
             );
           })}
-          <div className="my-1 border-t border-white/8" />
+          <div className="floating-divider my-1" />
           <button
-            className="flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 bg-transparent hover:bg-white/8 hover:text-white"
+            data-plus-item
+            className="floating-item flex items-center gap-3 px-3 py-1.5 mx-1 rounded-lg border-none cursor-pointer select-none"
             onMouseDown={(e) => {
               e.preventDefault();
               setShowPlusMenu(false);
             }}
+            onMouseEnter={() => {
+              plusIdxRef.current = SLASH_COMMANDS.length;
+              highlightPlusItem();
+            }}
           >
-            <span className="text-[13px] flex-1 text-left">Close</span>
-            <span className="text-[11px] text-white/40 font-semibold tracking-wide">Esc</span>
+            <span className="text-[14px] flex-1 text-left">Close</span>
+            <span className="floating-shortcut text-[11px] font-semibold tracking-wide">Esc</span>
           </button>
         </div>
       )}

@@ -14,6 +14,38 @@
   --color-checkbox-bg: #333;
   --color-checkbox-border: #555;
   --color-checkbox-checked: #ffffff;
+  --color-checkbox-check-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  --handle-bg: #2a2d30;
+  --handle-color: #888;
+  --handle-bg-hover: #3a3d40;
+  --handle-color-hover: #bbb;
+  --handle-bg-active: #555;
+  --handle-color-active: #e8e8e8;
+  --handle-grip-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+  --handle-grip-svg-hover: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23bbb' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+
+  /* Floating menus — format bar, link bar, plus menu */
+  --floating-bg: #1a1c1e;
+  --floating-border: rgba(255, 255, 255, 0.12);
+  --floating-text: #ffffff;
+  --floating-text-strong: #ffffff;
+  --floating-text-label: #a3a3a3;
+  --floating-shortcut: #6b6b6b;
+  --floating-divider: rgba(255, 255, 255, 0.12);
+  --floating-btn-hover-bg: #333333;
+  --floating-btn-active-bg: #333333;
+  --floating-item-hover-bg: rgba(255, 255, 255, 0.08);
+  --floating-item-active-bg: rgba(255, 255, 255, 0.08);
+  --floating-placeholder: #737373;
+  --floating-tooltip-bg: #262626;
+  --floating-tooltip-text: rgba(255, 255, 255, 0.9);
+  --floating-tooltip-shortcut: rgba(255, 255, 255, 0.6);
+  --floating-shadow-bar:
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.08);
+  --floating-shadow-dropdown:
+    0 4px 12px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 /* Light mode overrides */
@@ -31,6 +63,37 @@
     --color-checkbox-bg: #ededed;
     --color-checkbox-border: #d1d1d1;
     --color-checkbox-checked: #1a1a1a;
+    --color-checkbox-check-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+    --handle-bg: #e5e5e5;
+    --handle-color: #a3a3a3;
+    --handle-bg-hover: #d4d4d4;
+    --handle-color-hover: #737373;
+    --handle-bg-active: #404040;
+    --handle-color-active: #d4d4d4;
+    --handle-grip-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+    --handle-grip-svg-hover: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+
+    --floating-bg: #ffffff;
+    --floating-border: rgba(0, 0, 0, 0.12);
+    --floating-text: #000000;
+    --floating-text-strong: #000000;
+    --floating-text-label: #6b6b6b;
+    --floating-shortcut: #a3a3a3;
+    --floating-divider: rgba(0, 0, 0, 0.12);
+    --floating-btn-hover-bg: rgba(0, 0, 0, 0.06);
+    --floating-btn-active-bg: rgba(0, 0, 0, 0.08);
+    --floating-item-hover-bg: rgba(0, 0, 0, 0.05);
+    --floating-item-active-bg: rgba(0, 0, 0, 0.07);
+    --floating-placeholder: #a3a3a3;
+    --floating-tooltip-bg: #262626;
+    --floating-tooltip-text: rgba(255, 255, 255, 0.92);
+    --floating-tooltip-shortcut: rgba(255, 255, 255, 0.6);
+    --floating-shadow-bar:
+      0 4px 12px rgba(0, 0, 0, 0.06),
+      0 1px 3px rgba(0, 0, 0, 0.04);
+    --floating-shadow-dropdown:
+      0 4px 12px rgba(0, 0, 0, 0.06),
+      0 1px 3px rgba(0, 0, 0, 0.04);
   }
 }
 
@@ -135,7 +198,7 @@ html, body, #root {
 .tiptap ul[data-type="taskList"] li input[type="checkbox"]:checked {
   background: var(--color-checkbox-checked);
   border-color: var(--color-checkbox-checked);
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  background-image: var(--color-checkbox-check-svg);
   background-repeat: no-repeat;
   background-position: center;
   background-size: 12px 12px;
@@ -157,8 +220,66 @@ html, body, #root {
 /* Plus menu / slash menu active item */
 [data-plus-item].active,
 [data-slash-item].active {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--floating-item-active-bg);
+  color: var(--floating-text-strong);
+}
+
+/* ── Floating menu surfaces & controls ── */
+.floating-menu-bar {
+  background: var(--floating-bg);
+  border: 1px solid var(--floating-border);
+  box-shadow: var(--floating-shadow-bar);
+}
+.floating-menu-dropdown {
+  background: var(--floating-bg);
+  border: 1px solid var(--floating-border);
+  box-shadow: var(--floating-shadow-dropdown);
+}
+.floating-btn {
+  color: var(--floating-text);
+  background: transparent;
+  transition: background-color 150ms, color 150ms;
+}
+.floating-btn:hover {
+  background: var(--floating-btn-hover-bg);
+  color: var(--floating-text-strong);
+}
+.floating-btn.is-active {
+  background: var(--floating-btn-active-bg);
+  color: var(--floating-text-strong);
+}
+.floating-item {
+  color: var(--floating-text);
+  background: transparent;
+  transition: background-color 100ms, color 100ms;
+}
+.floating-item:hover {
+  background: var(--floating-item-hover-bg);
+  color: var(--floating-text-strong);
+}
+.floating-tooltip {
+  background: var(--floating-tooltip-bg);
+  color: var(--floating-tooltip-text);
+  border: 1px solid var(--floating-border);
+}
+.floating-tooltip .shortcut {
+  color: var(--floating-tooltip-shortcut);
+}
+.floating-input {
+  color: var(--floating-text-strong);
+  background: transparent;
+}
+.floating-input::placeholder {
+  color: var(--floating-placeholder);
+}
+.floating-divider {
+  border-top: 1px solid var(--floating-divider);
+}
+.floating-label {
+  color: var(--floating-text-label);
+}
+.floating-shortcut {
+  color: var(--floating-shortcut);
 }
 
 /* Images in editor */
@@ -196,17 +317,17 @@ html, body, #root {
   justify-content: center;
   cursor: pointer;
   user-select: none;
-  background-color: #e5e5e5;
-  color: #a3a3a3;
+  background-color: var(--handle-bg);
+  color: var(--handle-color);
   transition: background-color 150ms, color 150ms, opacity 150ms;
 }
 .drag-handle:hover {
-  background-color: #d4d4d4;
-  color: #737373;
+  background-color: var(--handle-bg-hover);
+  color: var(--handle-color-hover);
 }
 .drag-handle.is-active {
-  background-color: #404040;
-  color: #d4d4d4;
+  background-color: var(--handle-bg-active);
+  color: var(--handle-color-active);
 }
 .drag-handle.hide {
   opacity: 0;
@@ -217,12 +338,12 @@ html, body, #root {
 .drag-handle[data-drag-handle] {
   position: fixed;
   cursor: grab;
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+  background-image: var(--handle-grip-svg);
   background-repeat: no-repeat;
   background-position: center;
 }
 .drag-handle[data-drag-handle]:hover {
-  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+  background-image: var(--handle-grip-svg-hover);
 }
 .drag-handle[data-drag-handle]:active {
   cursor: grabbing;
