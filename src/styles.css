@@ -104,7 +104,7 @@ html, body, #root {
 .tiptap ul, .tiptap ol { padding-left: 0; margin-bottom: 24px; list-style: none; }
 .tiptap li { line-height: 26px; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 8px; }
 .tiptap ul:not([data-type="taskList"]) li::before { content: "•"; color: #c8c8c8; flex-shrink: 0; width: 16px; text-align: left; font-size: 28px; line-height: 26px; margin-top: -2px; }
-.tiptap li p { margin-bottom: 0; }
+.tiptap li p { margin-bottom: 0; flex: 1; min-width: 0; }
 
 /* Blockquote — thinner bar, black text, stronger vertical spacing */
 .tiptap blockquote {
@@ -178,5 +178,49 @@ html, body, #root {
 }
 .image-card-closing .tiptap > *:not(img) {
   opacity: var(--text-fade, 1);
+}
+
+/* ── Block handles (drag + plus) — shared styling ── */
+.drag-handle {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  z-index: 10;
+  opacity: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  background-color: #e5e5e5;
+  color: #a3a3a3;
+  transition: background-color 150ms, color 150ms, opacity 150ms;
+}
+.drag-handle:hover {
+  background-color: #d4d4d4;
+  color: #737373;
+}
+.drag-handle.is-active {
+  background-color: #404040;
+  color: #d4d4d4;
+}
+.drag-handle.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Extension-created handle (has data-drag-handle): grip icon + grab cursor */
+.drag-handle[data-drag-handle] {
+  position: fixed;
+  cursor: grab;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.drag-handle[data-drag-handle]:hover {
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='5' r='1'/%3E%3Ccircle cx='9' cy='12' r='1'/%3E%3Ccircle cx='9' cy='19' r='1'/%3E%3Ccircle cx='15' cy='5' r='1'/%3E%3Ccircle cx='15' cy='12' r='1'/%3E%3Ccircle cx='15' cy='19' r='1'/%3E%3C/svg%3E");
+}
+.drag-handle[data-drag-handle]:active {
+  cursor: grabbing;
 }
 

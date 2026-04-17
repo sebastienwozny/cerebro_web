@@ -1,5 +1,6 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { DOMParser } from "@tiptap/pm/model";
+import { NodeSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -7,7 +8,9 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
-import { useCallback, useEffect, useRef, useState } from "react";
+import GlobalDragHandle from "tiptap-extension-global-drag-handle";
+import AutoJoiner from "tiptap-extension-auto-joiner";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
@@ -55,13 +58,19 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInsertPosRef = useRef<number | null>(null);
 
-  // Block handle ("+" button) — appears next to the focused block
-  // Position is relative to the .tiptap container
-  const [handlePos, setHandlePos] = useState<{ top: number } | null>(null);
+  // Block handle ("+" button) — appears on hover next to the hovered block
+  // Position is in viewport coordinates (position: fixed)
+  const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number } | null>(null);
+  const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
+  const [handleHidden, setHandleHidden] = useState(true);
+  const [suppressHandles, setSuppressHandles] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [menuFlipUp, setMenuFlipUp] = useState(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const plusIdxRef = useRef(0);
+  const hoveredBlockRef = useRef<HTMLElement | null>(null);
+  const computeFromBlockRef = useRef<((found: HTMLElement) => void) | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -71,6 +80,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           openOnClick: false,
           HTMLAttributes: { class: "editor-link" },
         },
+        dropcursor: { color: "#d4d4d4", width: 2 },
       }),
       Placeholder.configure({
         placeholder: ({ node }) => {
@@ -84,6 +94,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       TaskItem.configure({ nested: false }),
       ImageWithAspect.configure({ inline: false, allowBase64: true }),
       Underline,
+      GlobalDragHandle.configure({
+        dragHandleWidth: 36,
+        scrollTreshold: 100,
+      }),
+      AutoJoiner,
     ],
     content: initialHtml.current,
     editable,
@@ -92,7 +107,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       hideSlashMenu();
     },
     onSelectionUpdate: ({ editor }) => {
-      const sel = !editor.state.selection.empty;
+      // Don't show the style toolbar for NodeSelection — that's what the
+      // drag-handle extension creates when grabbing a block, and it would
+      // flash the bar during a drag.
+      const sel = !editor.state.selection.empty && !(editor.state.selection instanceof NodeSelection);
       if (sel) setShowToolbar(true);
       // Exit link mode when cursor moves off a link (unless manually opened)
       if (!editor.isActive("link") && !linkManualRef.current) {
@@ -350,32 +368,201 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   const editorWrapRef = useRef<HTMLDivElement>(null);
 
-  // Update handle position when selection changes — relative to .note-editor
-  const updateHandlePos = useCallback(() => {
-    if (!editor || showPlusMenu || !editorWrapRef.current) return;
-    const { $from } = editor.state.selection;
-    const depth = $from.depth;
-    if (depth < 1) { setHandlePos(null); return; }
-    try {
-      const coords = editor.view.coordsAtPos($from.pos);
-      const wrapRect = editorWrapRef.current.getBoundingClientRect();
-      const cy = (coords.top + coords.bottom) / 2 - wrapRect.top;
-      setHandlePos({ top: cy });
-    } catch {
-      setHandlePos(null);
-    }
-  }, [editor, showPlusMenu]);
-
+  // Show "+" button on hover — mirrors tiptap-extension-global-drag-handle's
+  // detection + positioning logic so the two handles stay aligned.
   useEffect(() => {
-    if (!editor || !editable) { setHandlePos(null); return; }
-    editor.on("selectionUpdate", updateHandlePos);
-    editor.on("update", updateHandlePos);
-    updateHandlePos();
-    return () => {
-      editor.off("selectionUpdate", updateHandlePos);
-      editor.off("update", updateHandlePos);
+    if (!editor || !editable) return;
+    const tiptap = editor.view.dom as HTMLElement;
+    const DRAG_WIDTH = 36; // must match GlobalDragHandle.configure({ dragHandleWidth })
+    const SELECTORS = "li, p:not(:first-child), pre, blockquote, h1, h2, h3, h4, h5, h6";
+
+    const computeFromBlock = (found: HTMLElement) => {
+      const cs = getComputedStyle(found);
+      const parsedLH = parseInt(cs.lineHeight, 10);
+      const lineHeight = isNaN(parsedLH) ? parseInt(cs.fontSize, 10) * 1.2 : parsedLH;
+      const paddingTop = parseInt(cs.paddingTop, 10) || 0;
+      const rect = found.getBoundingClientRect();
+      const top = rect.top + paddingTop + (lineHeight - 24) / 2;
+      const dragLeft = rect.left - DRAG_WIDTH;
+      const plusLeft = dragLeft - 24 - 4;
+      let contentLeft = rect.left;
+      if (found.matches("ul:not([data-type=taskList]) li, ol li")) {
+        contentLeft = rect.left + 24;
+      } else if (found.matches('ul[data-type="taskList"] li')) {
+        contentLeft = rect.left + 26;
+      }
+      return { top, plusLeft, contentLeft, dragLeft };
     };
-  }, [editor, editable, updateHandlePos]);
+
+    const syncDragHandle = (dragLeft: number, top: number) => {
+      requestAnimationFrame(() => {
+        const parent = tiptap.parentElement;
+        const dragEl = parent?.querySelector(
+          ".drag-handle[data-drag-handle]",
+        ) as HTMLElement | null;
+        if (dragEl) {
+          dragEl.style.left = `${dragLeft}px`;
+          dragEl.style.top = `${top}px`;
+        }
+      });
+    };
+
+    computeFromBlockRef.current = (found: HTMLElement) => {
+      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft });
+      syncDragHandle(dragLeft, top);
+    };
+
+    const onMove = (e: MouseEvent) => {
+      if (showPlusMenu || suppressHandles) return;
+      const probeX = e.clientX + 50 + DRAG_WIDTH;
+      const probeY = e.clientY;
+      const found = document
+        .elementsFromPoint(probeX, probeY)
+        .find((el) => {
+          // Skip list containers — we want the <li>, not the whole <ul>/<ol>.
+          // (ul/ol are direct children of the editor root, so the generic
+          // `parentElement === tiptap` check below would otherwise match them.)
+          if (el.matches("ul, ol")) return false;
+          return el.parentElement === tiptap || el.matches(SELECTORS);
+        }) as HTMLElement | undefined;
+      if (!found) return;
+
+      hoveredBlockRef.current = found;
+      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft });
+      syncDragHandle(dragLeft, top);
+
+      const result = editor.view.posAtCoords({ left: probeX, top: probeY });
+      if (result) {
+        const $p = editor.state.doc.resolve(result.pos);
+        setHandleBlockPos($p.end());
+      }
+    };
+
+    // Left-margin handler: window-level listener gated to the narrow band
+    // immediately to the left of tiptap so hovering in that gutter (outside
+    // tiptap) also triggers the handles for the row at cursor y.
+    const MARGIN_BAND = 120; // px to the left of tiptap where handles react
+    const onMarginMove = (e: MouseEvent) => {
+      if (showPlusMenu || suppressHandles) return;
+      const tiptapRect = tiptap.getBoundingClientRect();
+      if (e.clientX >= tiptapRect.left) return; // right of tiptap → onMove handles it
+      if (e.clientX < tiptapRect.left - MARGIN_BAND) return;
+      if (e.clientY < tiptapRect.top || e.clientY > tiptapRect.bottom) return;
+
+      const probeX = tiptapRect.left + 20;
+      const probeY = e.clientY;
+      const found = document
+        .elementsFromPoint(probeX, probeY)
+        .find((el) => {
+          if (el.matches("ul, ol")) return false;
+          return el.parentElement === tiptap || el.matches(SELECTORS);
+        }) as HTMLElement | undefined;
+      if (!found) return;
+
+      hoveredBlockRef.current = found;
+      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft });
+      syncDragHandle(dragLeft, top);
+      // Extension hides its drag handle on tiptap mouseout; force-show while
+      // we're anchored to a block in the margin band.
+      requestAnimationFrame(() => {
+        const dragEl = tiptap.parentElement?.querySelector(
+          ".drag-handle[data-drag-handle]",
+        ) as HTMLElement | null;
+        dragEl?.classList.remove("hide");
+      });
+
+      const result = editor.view.posAtCoords({ left: probeX, top: probeY });
+      if (result) {
+        const $p = editor.state.doc.resolve(result.pos);
+        setHandleBlockPos($p.end());
+      }
+    };
+
+    tiptap.addEventListener("mousemove", onMove);
+    window.addEventListener("mousemove", onMarginMove);
+    return () => {
+      tiptap.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mousemove", onMarginMove);
+    };
+  }, [editor, editable, showPlusMenu, suppressHandles]);
+
+  // Keep the menu anchored to the hovered block when any ancestor scrolls or on resize.
+  useEffect(() => {
+    if (!showPlusMenu) return;
+    const update = () => {
+      const block = hoveredBlockRef.current;
+      if (!block || !block.isConnected) return;
+      computeFromBlockRef.current?.(block);
+    };
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [showPlusMenu]);
+
+  // Flip menu above the line when it would overflow the viewport bottom.
+  useLayoutEffect(() => {
+    if (!showPlusMenu || !handlePos) return;
+    const el = plusMenuRef.current;
+    if (!el) return;
+    const h = el.offsetHeight;
+    const viewportH = window.innerHeight;
+    setMenuFlipUp(handlePos.top + h > viewportH - 8);
+  }, [showPlusMenu, handlePos]);
+
+  // Reset suppression when mouse leaves the editor area so handles come back on re-entry
+  useEffect(() => {
+    if (!editor || !editable) return;
+    const wrap = editorWrapRef.current;
+    if (!wrap) return;
+    const onLeave = () => setSuppressHandles(false);
+    wrap.addEventListener("mouseleave", onLeave);
+    return () => wrap.removeEventListener("mouseleave", onLeave);
+  }, [editor, editable]);
+
+  // Force-hide the extension's drag handle while suppressed or while the "+" menu is open
+  useEffect(() => {
+    const parent = editor?.view.dom.parentElement;
+    const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
+    if (!dragEl) return;
+    if (suppressHandles || showPlusMenu) {
+      dragEl.style.opacity = "0";
+      dragEl.style.pointerEvents = "none";
+    } else {
+      dragEl.style.opacity = "";
+      dragEl.style.pointerEvents = "";
+    }
+  }, [suppressHandles, showPlusMenu, editor]);
+
+  // Mirror the drag handle's `hide` class onto our "+" so both fade together
+  useEffect(() => {
+    if (!editor || !editable) return;
+    let observer: MutationObserver | null = null;
+    let cancelled = false;
+    const attach = () => {
+      if (cancelled) return;
+      const parent = editor.view.dom.parentElement;
+      const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]");
+      if (!dragEl) {
+        requestAnimationFrame(attach);
+        return;
+      }
+      const sync = () => setHandleHidden(dragEl.classList.contains("hide"));
+      sync();
+      observer = new MutationObserver(sync);
+      observer.observe(dragEl, { attributes: true, attributeFilter: ["class"] });
+    };
+    attach();
+    return () => {
+      cancelled = true;
+      observer?.disconnect();
+    };
+  }, [editor, editable]);
 
   // Close plus menu on click outside or Escape
   useEffect(() => {
@@ -413,12 +600,39 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   function handlePlusClick() {
     if (!editor) return;
+    // Move selection into the hovered block so the menu acts on that block
+    if (handleBlockPos !== null) {
+      editor.chain().focus().setTextSelection(handleBlockPos).run();
+    }
     // If current line has content, insert a new empty line below and move cursor there
     const { $from } = editor.state.selection;
     const parentEmpty = $from.parent.content.size === 0;
     if (!parentEmpty) {
-      const blockEnd = $from.after();
-      editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
+      // Detect if we're inside a list/task item so we create a new item rather than a second paragraph within the same item
+      let liType: "listItem" | "taskItem" | null = null;
+      for (let d = $from.depth; d > 0; d--) {
+        const name = $from.node(d).type.name;
+        if (name === "listItem" || name === "taskItem") { liType = name; break; }
+      }
+      if (liType) {
+        editor.chain().focus().splitListItem(liType).run();
+      } else {
+        const blockEnd = $from.after();
+        editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
+      }
+      // Re-anchor "+" (and dropdown) to the newly inserted line
+      try {
+        const coords = editor.view.coordsAtPos(editor.state.selection.$from.pos);
+        const top = coords.top + (coords.bottom - coords.top - 24) / 2;
+        setHandlePos((prev) => (prev ? { ...prev, top } : null));
+        // Update hovered block ref so scroll-tracking follows the new line
+        const dom = editor.view.domAtPos(editor.state.selection.$from.pos).node;
+        const el = (dom instanceof HTMLElement ? dom : dom.parentElement) as HTMLElement | null;
+        if (el) {
+          const blockEl = el.closest("li, p, pre, blockquote, h1, h2, h3, h4, h5, h6") as HTMLElement | null;
+          if (blockEl) hoveredBlockRef.current = blockEl;
+        }
+      } catch { /* noop */ }
     }
     plusIdxRef.current = 0;
     setShowPlusMenu((v) => !v);
@@ -476,6 +690,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     }
 
     setShowPlusMenu(false);
+    setSuppressHandles(true);
   }
 
   return (
@@ -592,15 +807,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         document.body,
       )}
 
-      {/* Block handle "+" button — positioned inside .note-editor relative to tiptap */}
+      {/* Block handle "+" button — viewport-positioned next to the hovered block */}
       {editable && handlePos && (
         <button
           ref={plusBtnRef}
-          className={`absolute flex items-center justify-center border-none cursor-pointer select-none transition-all duration-150 w-6 h-6 rounded-[6px] ${showPlusMenu ? "text-neutral-300 bg-neutral-700" : "text-neutral-400 bg-neutral-200 hover:bg-neutral-300 hover:text-neutral-500"}`}
+          className={`drag-handle ${handleHidden || suppressHandles || showPlusMenu ? "hide" : ""}`}
           style={{
-            zIndex: 1,
-            left: -40,
-            top: handlePos.top - 12,
+            position: "fixed",
+            left: handlePos.left,
+            top: handlePos.top,
+            border: "none",
           }}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -616,11 +832,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       {editable && showPlusMenu && handlePos && (
         <div
           ref={plusMenuRef}
-          className="absolute flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8"
+          className="flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8"
           style={{
-            zIndex: 2,
-            left: -40,
-            top: handlePos.top + 16,
+            position: "fixed",
+            zIndex: 10003,
+            left: handlePos.contentLeft,
+            top: handlePos.top,
+            transform: menuFlipUp ? "translateY(-100%)" : undefined,
             background: "#1a1c1e",
             boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
             minWidth: 180,
