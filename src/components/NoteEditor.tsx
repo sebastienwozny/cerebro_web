@@ -62,6 +62,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
   const [handleHidden, setHandleHidden] = useState(true);
   const [suppressHandles, setSuppressHandles] = useState(false);
+  const [hasSelection, setHasSelection] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [menuFlipUp, setMenuFlipUp] = useState(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
@@ -110,7 +111,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       // drag-handle extension creates when grabbing a block, and it would
       // flash the bar during a drag.
       const sel = !editor.state.selection.empty && !(editor.state.selection instanceof NodeSelection);
-      if (sel) setShowToolbar(true);
+      setHasSelection(sel);
+      // Mirror selection state to the format bar — collapsing the selection
+      // (e.g. clicking elsewhere in the editor) should hide the bar.
+      setShowToolbar(sel);
       // Exit link mode when cursor moves off a link (unless manually opened)
       if (!editor.isActive("link") && !linkManualRef.current) {
         setLinkMode(false);
@@ -275,6 +279,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         if (!mouseDownInEditor) {
           editor.commands.blur();
           setShowToolbar(false);
+          // `blur()` keeps the ProseMirror selection non-empty, so
+          // onSelectionUpdate doesn't fire. Reset hasSelection manually so the
+          // block handles ungate on the next mousemove.
+          setHasSelection(false);
           setLinkMode(false);
           setLinkUrl("");
           linkManualRef.current = false;
@@ -427,7 +435,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     };
 
     const onMove = (e: MouseEvent) => {
-      if (showPlusMenu || suppressHandles) return;
+      if (showPlusMenu || suppressHandles || hasSelection) return;
       const probeX = e.clientX + 50 + DRAG_WIDTH;
       const probeY = e.clientY;
       const found = document
@@ -469,7 +477,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     // tiptap) also triggers the handles for the row at cursor y.
     const MARGIN_BAND = 120; // px to the left of tiptap where handles react
     const onMarginMove = (e: MouseEvent) => {
-      if (showPlusMenu || suppressHandles) return;
+      if (showPlusMenu || suppressHandles || hasSelection) return;
       const tiptapRect = tiptap.getBoundingClientRect();
       if (e.clientX >= tiptapRect.left) return; // right of tiptap → onMove handles it
       if (e.clientX < tiptapRect.left - MARGIN_BAND) return;
@@ -517,7 +525,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       tiptap.removeEventListener("mousemove", onMove);
       window.removeEventListener("mousemove", onMarginMove);
     };
-  }, [editor, editable, showPlusMenu, suppressHandles]);
+  }, [editor, editable, showPlusMenu, suppressHandles, hasSelection]);
 
   // Keep the handles (and menu when open) anchored to the hovered block when
   // any ancestor scrolls or the viewport resizes. Runs whenever a block is
@@ -557,32 +565,45 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     return () => wrap.removeEventListener("mouseleave", onLeave);
   }, [editor, editable]);
 
-  // Force-hide the extension's drag handle while suppressed or while the "+" menu is open
+  // Force-hide the extension's drag handle while suppressed, while the "+" menu
+  // is open, or while the user has a text selection (so the format toolbar
+  // isn't fighting for attention with the block handles).
   useEffect(() => {
     const parent = editor?.view.dom.parentElement;
     const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
     if (!dragEl) return;
-    if (suppressHandles || showPlusMenu) {
+    if (suppressHandles || showPlusMenu || hasSelection) {
       dragEl.style.opacity = "0";
       dragEl.style.pointerEvents = "none";
     } else {
       dragEl.style.opacity = "";
       dragEl.style.pointerEvents = "";
     }
-  }, [suppressHandles, showPlusMenu, editor]);
+  }, [suppressHandles, showPlusMenu, hasSelection, editor]);
 
-  // When the plus menu closes, clear the stored handle position so our "+" hides
-  // until the next mousemove (which repositions it against the hovered block).
-  // Without this, after inserting and closing, the "+" stays frozen on the new
-  // line while the extension's drag handle follows the cursor elsewhere.
+  // When the plus menu closes OR a text selection is cleared, clear the stored
+  // handle position so our "+" hides until the next mousemove (which
+  // repositions it against the hovered block). Also add `hide` to the extension
+  // drag handle so it doesn't flash alone at its last extension-tracked
+  // position (which may differ from our sync). Next mousemove removes the
+  // class and re-syncs both handles together.
+  const resetHandles = () => {
+    setHandlePos(null);
+    hoveredBlockRef.current = null;
+    const parent = editor?.view.dom.parentElement;
+    const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
+    dragEl?.classList.add("hide");
+  };
   const prevShowPlusRef = useRef(false);
   useEffect(() => {
-    if (prevShowPlusRef.current && !showPlusMenu) {
-      setHandlePos(null);
-      hoveredBlockRef.current = null;
-    }
+    if (prevShowPlusRef.current && !showPlusMenu) resetHandles();
     prevShowPlusRef.current = showPlusMenu;
-  }, [showPlusMenu]);
+  }, [showPlusMenu, editor]);
+  const prevHasSelectionRef = useRef(false);
+  useEffect(() => {
+    if (prevHasSelectionRef.current && !hasSelection) resetHandles();
+    prevHasSelectionRef.current = hasSelection;
+  }, [hasSelection, editor]);
 
   // Mirror the drag handle's `hide` class onto our "+" so both fade together
   useEffect(() => {
@@ -833,14 +854,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         document.body,
       )}
 
-      {/* Block handle "+" button — viewport-positioned next to the hovered block */}
-      {editable && handlePos && (
+      {/* Block handle "+" button — always mounted (gated via `.hide`) so the
+          opacity transition (150ms on `.drag-handle`) fades the icon in/out
+          instead of snapping when handlePos appears/disappears. */}
+      {editable && (
         <button
           ref={plusBtnRef}
-          className={`drag-handle fixed border-none ${handleHidden || suppressHandles || showPlusMenu ? "hide" : ""}`}
+          className={`drag-handle fixed border-none ${!handlePos || handleHidden || suppressHandles || showPlusMenu || hasSelection ? "hide" : ""}`}
           style={{
-            left: handlePos.left,
-            top: handlePos.top,
+            left: handlePos?.left ?? 0,
+            top: handlePos?.top ?? 0,
           }}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -852,11 +875,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         </button>
       )}
 
-      {/* Plus menu dropdown */}
-      {editable && showPlusMenu && handlePos && (
+      {/* Plus menu dropdown — portaled so it escapes NoteCard's stacking
+          context (z-9999) and sits above every other UI layer. */}
+      {editable && showPlusMenu && handlePos && createPortal(
         <div
           ref={plusMenuRef}
-          className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-10003 min-w-[300px]"
+          className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-10005 min-w-[300px]"
           style={{
             left: handlePos.contentLeft,
             top: handlePos.lineBottom + 8,
@@ -914,7 +938,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
             <span className="text-[14px] flex-1 text-left">Close</span>
             <span className="floating-shortcut text-[11px] font-semibold tracking-wide">Esc</span>
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );
