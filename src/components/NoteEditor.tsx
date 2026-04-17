@@ -765,7 +765,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     // branch (e.g. selecting "Bullet List" while already in one).
     editor.commands.focus();
     setShowPlusMenu(false);
-    setSuppressHandles(true);
+    // Note: we intentionally do NOT set `suppressHandles` here. The
+    // menu-close effect (`prevShowPlusRef`) already clears `handlePos` and
+    // hides the extension drag handle, so the handles won't flash on the
+    // just-inserted block. Setting `suppressHandles` would also block the
+    // next mousemove from restoring the handles until the cursor leaves the
+    // editor wrapper — which breaks hover after selecting a slash command.
   }
 
   return (
