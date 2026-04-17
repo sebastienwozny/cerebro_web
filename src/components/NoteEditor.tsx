@@ -15,7 +15,7 @@ import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2,
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
-import { SLASH_COMMANDS, executeSlashCommand } from "../lib/slashCommands";
+import { SLASH_COMMANDS } from "../lib/slashCommands";
 import { readImageFile } from "../lib/imageUtils";
 
 // Extend Tiptap Image to carry aspect ratio
@@ -46,8 +46,6 @@ interface Props {
 
 export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const initialHtml = useRef(blocksToHtml(blocks));
-  const slashMenuRef = useRef<HTMLDivElement>(null);
-  const slashIdxRef = useRef(0);
   const [showToolbar, setShowToolbar] = useState(false);
   const [linkMode, setLinkMode] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
@@ -60,7 +58,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   // Block handle ("+" button) — appears on hover next to the hovered block
   // Position is in viewport coordinates (position: fixed)
-  const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number } | null>(null);
+  const [handlePos, setHandlePos] = useState<{ top: number; left: number; contentLeft: number; lineH: number } | null>(null);
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
   const [handleHidden, setHandleHidden] = useState(true);
   const [suppressHandles, setSuppressHandles] = useState(false);
@@ -104,7 +102,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     editable,
     onUpdate: ({ editor }) => {
       onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>));
-      hideSlashMenu();
     },
     onSelectionUpdate: ({ editor }) => {
       // Don't show the style toolbar for NodeSelection — that's what the
@@ -171,29 +168,23 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           enterLinkMode();
           return true;
         }
-        if (event.key === "/" && slashMenuRef.current?.style.display !== "block") {
-          setTimeout(() => showSlashMenu(), 0);
+        if (event.key === "/" && !showPlusMenu) {
+          // Open the plus menu after the "/" is inserted, then delete it
+          setTimeout(() => {
+            if (!editor) return;
+            const { from } = editor.state.selection;
+            editor.chain().focus().deleteRange({ from: from - 1, to: from }).run();
+            // Position the handle at the current block so the menu opens below it
+            const { $from } = editor.state.selection;
+            const blockPos = $from.before($from.depth);
+            const domNode = editor.view.nodeDOM(blockPos) as HTMLElement | null;
+            if (domNode && computeFromBlockRef.current) {
+              computeFromBlockRef.current(domNode);
+            }
+            plusIdxRef.current = -1;
+            setShowPlusMenu(true);
+          }, 0);
           return false;
-        }
-        if (slashMenuRef.current?.style.display === "block") {
-          if (event.key === "Escape") {
-            hideSlashMenu();
-            return true;
-          }
-          if (event.key === "ArrowDown") {
-            slashIdxRef.current = Math.min(slashIdxRef.current + 1, SLASH_COMMANDS.length - 1);
-            highlightSlashItem();
-            return true;
-          }
-          if (event.key === "ArrowUp") {
-            slashIdxRef.current = Math.max(slashIdxRef.current - 1, 0);
-            highlightSlashItem();
-            return true;
-          }
-          if (event.key === "Enter") {
-            handleSlashSelect(SLASH_COMMANDS[slashIdxRef.current]);
-            return true;
-          }
         }
         return false;
       },
@@ -216,32 +207,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       // Paste / drop — insert at current cursor
       (editor.chain().focus() as any).setImage({ src: dataUrl, aspect }).run();
     }
-  }
-
-  function handleSlashSelect(cmd: (typeof SLASH_COMMANDS)[number]) {
-    if (!editor) return;
-    if (cmd.type === "image") {
-      // Delete the "/" character
-      const { from } = editor.state.selection;
-      editor.chain().focus().deleteRange({ from: from - 1, to: from }).run();
-
-      // If current block is now empty, remove it and save its position
-      const { $from } = editor.state.selection;
-      const parentEmpty = $from.parent.content.size === 0;
-      if (parentEmpty) {
-        const blockStart = $from.before();
-        const blockEnd = $from.after();
-        imageInsertPosRef.current = blockStart;
-        editor.chain().deleteRange({ from: blockStart, to: blockEnd }).run();
-      } else {
-        imageInsertPosRef.current = editor.state.selection.from;
-      }
-
-      fileInputRef.current?.click();
-    } else {
-      executeSlashCommand(editor, cmd);
-    }
-    hideSlashMenu();
   }
 
   useEffect(() => {
@@ -381,28 +346,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     linkManualRef.current = false;
   }
 
-  function showSlashMenu() {
-    const menu = slashMenuRef.current;
-    if (!menu || !editor) return;
-    slashIdxRef.current = 0;
-    menu.style.display = "block";
-    highlightSlashItem();
-  }
-
-  function hideSlashMenu() {
-    const menu = slashMenuRef.current;
-    if (menu) menu.style.display = "none";
-  }
-
-  function highlightSlashItem() {
-    const menu = slashMenuRef.current;
-    if (!menu) return;
-    const items = menu.querySelectorAll("[data-slash-item]");
-    items.forEach((el, i) => {
-      (el as HTMLElement).classList.toggle("active", i === slashIdxRef.current);
-    });
-  }
-
   // ── Block handle ("+" button next to focused block) ──
 
   const editorWrapRef = useRef<HTMLDivElement>(null);
@@ -430,7 +373,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       } else if (found.matches('ul[data-type="taskList"] li')) {
         contentLeft = rect.left + 26;
       }
-      return { top, plusLeft, contentLeft, dragLeft };
+      return { top, plusLeft, contentLeft, dragLeft, lineHeight };
     };
 
     const syncDragHandle = (dragLeft: number, top: number) => {
@@ -447,8 +390,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     };
 
     computeFromBlockRef.current = (found: HTMLElement) => {
-      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
       syncDragHandle(dragLeft, top);
     };
 
@@ -468,8 +411,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (!found) return;
 
       hoveredBlockRef.current = found;
-      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
       syncDragHandle(dragLeft, top);
 
       const result = editor.view.posAtCoords({ left: probeX, top: probeY });
@@ -501,8 +444,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (!found) return;
 
       hoveredBlockRef.current = found;
-      const { top, plusLeft, contentLeft, dragLeft } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft });
+      const { top, plusLeft, contentLeft, dragLeft, lineHeight } = computeFromBlock(found);
+      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight });
       syncDragHandle(dragLeft, top);
       // Extension hides its drag handle on tiptap mouseout; force-show while
       // we're anchored to a block in the margin band.
@@ -746,25 +689,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         }}
       />
       <EditorContent editor={editor} />
-      <div ref={slashMenuRef} className="slash-menu" style={{ display: "none" }}>
-        {SLASH_COMMANDS.map((cmd, i) => (
-          <div
-            key={cmd.type}
-            data-slash-item
-            className={`slash-menu-item ${i === 0 ? "active" : ""}`}
-            onMouseDown={(e) => {
-              e.preventDefault();
-              handleSlashSelect(cmd);
-            }}
-            onMouseEnter={() => {
-              slashIdxRef.current = i;
-              highlightSlashItem();
-            }}
-          >
-            {cmd.label}
-          </div>
-        ))}
-      </div>
       {/* Floating toolbars — rendered via portal so fixed positioning works */}
       {editable && createPortal(
         <>
@@ -876,8 +800,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
             position: "fixed",
             zIndex: 10003,
             left: handlePos.contentLeft,
-            top: handlePos.top,
-            transform: menuFlipUp ? "translateY(-100%)" : undefined,
+            top: handlePos.top + handlePos.lineH,
+            transform: menuFlipUp ? `translateY(calc(-100% - ${handlePos.lineH * 2}px))` : undefined,
             background: "#1a1c1e",
             boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
             minWidth: 220,
