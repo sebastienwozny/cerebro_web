@@ -13,7 +13,9 @@ function loadSaved(): CanvasTransform {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
+  } catch {
+    // corrupted storage — fall through to defaults
+  }
   return { offsetX: 0, offsetY: 0, scale: 0.5 };
 }
 

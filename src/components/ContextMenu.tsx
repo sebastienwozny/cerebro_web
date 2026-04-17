@@ -1,13 +1,5 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import {
-  MousePointerClick,
-  Copy,
-  Trash2,
-  Layers,
-  LayoutGrid,
-  BoxSelect,
-} from "lucide-react";
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 const MOD = isMac ? "⌘" : "Ctrl+";

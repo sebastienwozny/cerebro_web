@@ -9,7 +9,7 @@ import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import gsap from "gsap";
-import { DELETE_DURATION, CARD_W, CARD_H, GRID_GAP } from "../constants";
+import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
 import { getCardSize } from "../lib/cardDimensions";
 import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
 import NoteCard from "../components/NoteCard";
@@ -24,7 +24,7 @@ import {
 
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
-const NOOP_ID = (_id: string) => {};
+const NOOP_ID = () => {};
 
 export default function Canvas() {
   const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
@@ -172,6 +172,7 @@ export default function Canvas() {
         return { type: "batch", actions: inverses };
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `triggerPop` is stable (ref-backed setTimeout + useState setter)
   }, []);
 
   const performUndo = useCallback(async () => {
@@ -579,18 +580,6 @@ export default function Canvas() {
       setDeletingIds(new Set());
     }, DELETE_DURATION * 1000);
   }, [notes, selectedIds, setSelectedIds, setDeletingIds, deleteNote]);
-
-  // Bring selected to front
-  const bringSelectedToFront = useCallback(async () => {
-    if (selectedIds.size === 0) return;
-    const maxZ = Math.max(...notes.map(n => n.zOrder), 0);
-    let z = maxZ + 1;
-    await db.transaction("rw", db.notes, async () => {
-      for (const id of selectedIds) {
-        await db.notes.update(id, { zOrder: z++ });
-      }
-    });
-  }, [notes, selectedIds]);
 
   // Build context menu items
   const contextMenuItems: MenuItem[] = contextMenu

@@ -10,7 +10,7 @@ import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus, Type, Heading1, Heading2, Heading3, List, ListChecks, Quote, ImageIcon } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
@@ -210,8 +210,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         .insertContentAt(pos, { type: "image", attrs: { src: dataUrl, aspect } })
         .run();
     } else {
-      // Paste / drop — insert at current cursor
-      (editor.chain().focus() as any).setImage({ src: dataUrl, aspect }).run();
+      // Paste / drop — insert at current cursor. We use `insertContent` instead
+      // of the extension's `setImage` command because TipTap's command types
+      // don't pick up attributes we added via extension (like `aspect`).
+      editor.chain().focus()
+        .insertContent({ type: "image", attrs: { src: dataUrl, aspect } })
+        .run();
     }
   }
 
@@ -587,23 +591,23 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // drag handle so it doesn't flash alone at its last extension-tracked
   // position (which may differ from our sync). Next mousemove removes the
   // class and re-syncs both handles together.
-  const resetHandles = () => {
+  const resetHandles = useCallback(() => {
     setHandlePos(null);
     hoveredBlockRef.current = null;
     const parent = editor?.view.dom.parentElement;
     const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
     dragEl?.classList.add("hide");
-  };
+  }, [editor]);
   const prevShowPlusRef = useRef(false);
   useEffect(() => {
     if (prevShowPlusRef.current && !showPlusMenu) resetHandles();
     prevShowPlusRef.current = showPlusMenu;
-  }, [showPlusMenu, editor]);
+  }, [showPlusMenu, resetHandles]);
   const prevHasSelectionRef = useRef(false);
   useEffect(() => {
     if (prevHasSelectionRef.current && !hasSelection) resetHandles();
     prevHasSelectionRef.current = hasSelection;
-  }, [hasSelection, editor]);
+  }, [hasSelection, resetHandles]);
 
   // Mirror the drag handle's `hide` class onto our "+" so both fade together
   useEffect(() => {
@@ -629,6 +633,14 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       observer?.disconnect();
     };
   }, [editor, editable]);
+
+  const highlightPlusItem = useCallback(() => {
+    const menu = plusMenuRef.current;
+    if (!menu) return;
+    menu.querySelectorAll("[data-plus-item]").forEach((el, i) => {
+      (el as HTMLElement).classList.toggle("active", i === plusIdxRef.current);
+    });
+  }, []);
 
   // Close plus menu on click outside or Escape
   useEffect(() => {
@@ -660,15 +672,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       window.removeEventListener("pointerdown", onClick, true);
       window.removeEventListener("keydown", onKey, true);
     };
-  }, [showPlusMenu]);
-
-  function highlightPlusItem() {
-    const menu = plusMenuRef.current;
-    if (!menu) return;
-    menu.querySelectorAll("[data-plus-item]").forEach((el, i) => {
-      (el as HTMLElement).classList.toggle("active", i === plusIdxRef.current);
-    });
-  }
+  }, [showPlusMenu, highlightPlusItem]);
 
   function handlePlusClick() {
     if (!editor) return;
