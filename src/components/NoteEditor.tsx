@@ -11,7 +11,7 @@ import Underline from "@tiptap/extension-underline";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check, Plus, Type, Heading1, Heading2, Heading3, List, ListChecks, Quote, ImageIcon } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -864,27 +864,44 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
             transform: menuFlipUp ? "translateY(-100%)" : undefined,
             background: "#1a1c1e",
             boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3), 0 8px 10px -6px rgba(0,0,0,0.3), 0 40px 80px -20px rgba(0,0,0,0.25)",
-            minWidth: 180,
+            minWidth: 220,
           }}
         >
-          {SLASH_COMMANDS.map((cmd, i) => (
-            <button
-              key={cmd.type}
-              data-plus-item
-              className={`flex items-center px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none text-[13px] transition-colors duration-100 text-neutral-300 hover:bg-white/8 hover:text-white ${i === 0 ? "bg-white/8 text-white" : ""}`}
-              style={{ background: i === 0 ? undefined : "transparent" }}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                handlePlusSelect(cmd);
-              }}
-              onMouseEnter={() => {
-                plusIdxRef.current = i;
-                highlightPlusItem();
-              }}
-            >
-              {cmd.label}
-            </button>
-          ))}
+          {SLASH_COMMANDS.map((cmd, i) => {
+            const meta = {
+              text:      { icon: Type,       shortcut: "" },
+              heading1:  { icon: Heading1,   shortcut: "#" },
+              heading2:  { icon: Heading2,   shortcut: "##" },
+              heading3:  { icon: Heading3,   shortcut: "###" },
+              bulletList:{ icon: List,        shortcut: "-" },
+              todo:      { icon: ListChecks,  shortcut: "[]" },
+              quote:     { icon: Quote,       shortcut: ">" },
+              image:     { icon: ImageIcon,   shortcut: "/image" },
+            }[cmd.type] ?? { icon: Type, shortcut: "" };
+            const Icon = meta.icon;
+            return (
+              <button
+                key={cmd.type}
+                data-plus-item
+                className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 text-neutral-300 hover:bg-white/8 hover:text-white ${i === 0 ? "bg-white/8 text-white" : ""}`}
+                style={{ background: i === 0 ? undefined : "transparent" }}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  handlePlusSelect(cmd);
+                }}
+                onMouseEnter={() => {
+                  plusIdxRef.current = i;
+                  highlightPlusItem();
+                }}
+              >
+                <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
+                <span className="text-[13px] flex-1 text-left">{cmd.label}</span>
+                {meta.shortcut && (
+                  <span className="text-[11px] text-white/40 ml-4 font-semibold tracking-wide">{meta.shortcut}</span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>
