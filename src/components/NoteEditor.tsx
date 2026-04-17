@@ -364,7 +364,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       const lineHeight = isNaN(parsedLH) ? parseInt(cs.fontSize, 10) * 1.2 : parsedLH;
       const paddingTop = parseInt(cs.paddingTop, 10) || 0;
       const rect = found.getBoundingClientRect();
-      const top = rect.top + paddingTop + (lineHeight - 24) / 2;
+      let top = rect.top + paddingTop + (lineHeight - 24) / 2;
+      // Task items: the checkbox sits 5px lower than text baseline
+      // (via `label { margin-top: 5px }`), so align handles to its center instead.
+      if (found.matches('ul[data-type="taskList"] li')) {
+        const label = found.querySelector("label") as HTMLElement | null;
+        const checkbox = label?.querySelector('input[type="checkbox"]') as HTMLElement | null;
+        if (checkbox) {
+          const cbRect = checkbox.getBoundingClientRect();
+          top = cbRect.top + (cbRect.height - 24) / 2;
+        }
+      }
       const dragLeft = rect.left - DRAG_WIDTH;
       const plusLeft = dragLeft - 24 - 4;
       let contentLeft = rect.left;
