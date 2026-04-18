@@ -144,7 +144,8 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
           const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
           const wrap = b.codeWrap ? ` data-wrap="true"` : "";
           const highlighted = highlightCode(c, b.codeLanguage);
-          parts.push(`<pre${wrap}><code${cls}>${highlighted}</code></pre>`);
+          parts.push(`<pre${wrap}><div class="code-block-scroll">`
+            + `<code${cls}>${highlighted}</code></div></pre>`);
           break;
         }
         case "hr": parts.push(`<hr>`); break;

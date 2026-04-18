@@ -300,38 +300,47 @@ html, body, #root {
   border-radius: 8px;
   background: var(--color-code-bg);
   white-space: pre;
-  overflow-x: auto;
+  /* Clip the inner scrollable area to the rounded corners. The scrollbar
+     lives on `.code-block-body` (the inner NodeViewWrapper div / preview
+     wrapper) so a chunky native scrollbar can't visually escape past the
+     pre's border-radius. */
+  overflow: hidden;
   margin: 12px 0;
   transition: box-shadow 150ms, background 150ms;
-  /* Theme the horizontal scrollbar so it sits cleanly on the dark
-     (or light) code-block background instead of rendering as the
-     platform default (chunky, white, visually spilling past the
-     rounded corners). */
+}
+/* Inner scroll wrapper — sits inside `<pre>` (which clips overflow via
+   its border-radius). Same class used in the editor NodeView and in the
+   static preview HTML so both render identically. */
+.tiptap .code-block-scroll {
+  overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
-.tiptap pre::-webkit-scrollbar {
+.tiptap .code-block-scroll::-webkit-scrollbar {
   height: 8px;
 }
-.tiptap pre::-webkit-scrollbar-track {
+.tiptap .code-block-scroll::-webkit-scrollbar-track {
   background: transparent;
-  margin: 0 8px;
 }
-.tiptap pre::-webkit-scrollbar-thumb {
+.tiptap .code-block-scroll::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.18);
   border-radius: 4px;
 }
-.tiptap pre::-webkit-scrollbar-thumb:hover {
+.tiptap .code-block-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+/* Wrap mode — no horizontal scrollbar needed. */
+.tiptap pre[data-wrap="true"] .code-block-scroll {
+  overflow-x: hidden;
+}
 @media (prefers-color-scheme: light) {
-  .tiptap pre {
+  .tiptap .code-block-scroll {
     scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
   }
-  .tiptap pre::-webkit-scrollbar-thumb {
+  .tiptap .code-block-scroll::-webkit-scrollbar-thumb {
     background: rgba(0, 0, 0, 0.22);
   }
-  .tiptap pre::-webkit-scrollbar-thumb:hover {
+  .tiptap .code-block-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.35);
   }
 }

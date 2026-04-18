@@ -128,15 +128,20 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
           {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
         </button>
       </div>
-      {/* NodeViewContent hardcodes `white-space: pre-wrap` as an inline
-          style on the rendered element, which wins over any CSS rule and
-          means the editor's <code> would *always* wrap. Override it here
-          so the wrap toggle actually takes effect inside the editor. */}
-      <NodeViewContent<"code">
-        as="code"
-        className={`language-${language}`}
-        style={{ whiteSpace: wrap ? "pre-wrap" : "pre" }}
-      />
+      {/* Wrap the code in its own scrollable div so the horizontal scrollbar
+          lives here rather than on the outer <pre>. That keeps the scrollbar
+          well inside the pre's border-radius, and the header (position:
+          absolute in the pre's padding area) stays outside the scroll clip.
+          NodeViewContent hardcodes `white-space: pre-wrap` as an inline
+          style on the rendered element, which wins over any CSS rule — we
+          override via `style` so the wrap toggle actually flips. */}
+      <div className="code-block-scroll">
+        <NodeViewContent<"code">
+          as="code"
+          className={`language-${language}`}
+          style={{ whiteSpace: wrap ? "pre-wrap" : "pre" }}
+        />
+      </div>
     </NodeViewWrapper>
   );
 }
