@@ -74,7 +74,6 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
     <NodeViewWrapper
       className="code-block-body"
       data-language={language}
-      data-wrap={wrap ? "true" : "false"}
     >
       <div className="code-block-header" contentEditable={false}>
         {/* Label sizes to the selected language; the <select> overlays it
