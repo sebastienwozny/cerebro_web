@@ -7,11 +7,12 @@ import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useWindowSize } from "../hooks/useWindowSize";
+import { useCanvasImageImport } from "../hooks/useCanvasImageImport";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import gsap from "gsap";
 import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
 import { getCardSize } from "../lib/cardDimensions";
-import { readImageFile, hasImageFile, getImageFile } from "../lib/imageUtils";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 import NotePreview from "../components/NotePreview";
@@ -31,7 +32,7 @@ export default function Canvas() {
   const { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
   void transformVersion;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [windowSize, setWindowSize] = useState({ w: window.innerWidth, h: window.innerHeight });
+  const windowSize = useWindowSize();
 
   const { openNoteId, openProgress, isClosing, closingScrollOffset, openTransform, openNote, closeNote } =
     useOpenClose(bringToFront, getTransform);
@@ -73,12 +74,6 @@ export default function Canvas() {
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragDuplicateIdsRef = useRef<string[]>([]);
-
-  useEffect(() => {
-    const onResize = () => setWindowSize({ w: window.innerWidth, h: window.innerHeight });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   useEffect(() => { applyTransform(); }, [applyTransform]);
 
@@ -301,6 +296,25 @@ export default function Canvas() {
     recordAction: undoStack.record.bind(undoStack),
   });
 
+  // Create a new note (with optional image) at canvas coords, record for undo.
+  const createNoteAt = useCallback(
+    async (canvasX: number, canvasY: number, dataUrl?: string, aspect?: number) => {
+      const noteId = crypto.randomUUID();
+      triggerPop([noteId]);
+      undoStack.record({ type: "create", noteIds: [noteId] });
+      await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
+    },
+    [addNote, triggerPop]
+  );
+
+  const createNoteAtViewportCenter = useCallback(async () => {
+    const t = getTransform();
+    const spread = 40;
+    const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+    const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+    await createNoteAt(canvasX, canvasY);
+  }, [getTransform, createNoteAt]);
+
   // Double-click to create
   const handleDoubleClick = useCallback(
     async (e: React.MouseEvent) => {
@@ -309,58 +323,13 @@ export default function Canvas() {
       const t = getTransform();
       const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
       const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
-      const noteId = crypto.randomUUID();
-      triggerPop([noteId]);
-      undoStack.record({ type: "create", noteIds: [noteId] });
-      await addNote(canvasX, canvasY, noteId);
+      await createNoteAt(canvasX, canvasY);
     },
-    [addNote, canvasLocked, getTransform, windowSize, triggerPop]
+    [canvasLocked, getTransform, windowSize, createNoteAt]
   );
 
-  // ── Image drop & file input ──
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    if (canvasLocked) return;
-    if (hasImageFile(e.dataTransfer)) {
-      e.preventDefault();
-      setIsDragOver(true);
-    }
-  }, [canvasLocked]);
-
-  const handleDragLeave = useCallback(() => setIsDragOver(false), []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    setIsDragOver(false);
-    if (canvasLocked) return;
-    const file = getImageFile(e.dataTransfer);
-    if (!file) return;
-    e.preventDefault();
-    const t = getTransform();
-    const canvasX = (e.clientX - windowSize.w / 2 - t.offsetX) / t.scale;
-    const canvasY = (e.clientY - windowSize.h / 2 - t.offsetY) / t.scale;
-    const { dataUrl, aspect } = await readImageFile(file);
-    const noteId = crypto.randomUUID();
-    triggerPop([noteId]);
-    undoStack.record({ type: "create", noteIds: [noteId] });
-    await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
-  }, [canvasLocked, getTransform, windowSize, triggerPop, addNote]);
-
-  const handleImageInput = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    const t = getTransform();
-    const spread = 40;
-    const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
-    const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
-    const { dataUrl, aspect } = await readImageFile(file);
-    const noteId = crypto.randomUUID();
-    triggerPop([noteId]);
-    undoStack.record({ type: "create", noteIds: [noteId] });
-    await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
-  }, [getTransform, triggerPop, addNote]);
+  const { imageInputRef, isDragOver, handleDragOver, handleDragLeave, handleDrop, handleImageInput } =
+    useCanvasImageImport({ canvasLocked, windowSize, getTransform, createNote: createNoteAt });
 
   const handleCardTap = useCallback(
     (noteId: string) => { clearSelection(); openNote(noteId); },
@@ -643,14 +612,14 @@ export default function Canvas() {
       {/* Drag-over indicator */}
       {isDragOver && (
         <div
-          className="absolute inset-0 pointer-events-none rounded-xl z-9997 bg-[rgba(74,158,255,0.06)] border-[3px] border-dashed border-[rgba(74,158,255,0.4)]"
+          className="absolute inset-0 pointer-events-none rounded-xl z-(--z-drag-over) bg-accent/5 border-[3px] border-dashed border-accent/40"
         />
       )}
 
       {/* White overlay */}
       {openProgress > 0 && (
         <div
-          className="absolute inset-0 pointer-events-none bg-card-open z-9998"
+          className="absolute inset-0 pointer-events-none bg-card-open z-(--z-card-overlay)"
           style={{ opacity: openProgress }}
         />
       )}
@@ -777,7 +746,7 @@ export default function Canvas() {
       {/* Marquee selection rectangle */}
       {marquee && (
         <div
-          className="absolute pointer-events-none rounded-sm z-9990 bg-[rgba(74,158,255,0.08)] border border-[rgba(74,158,255,0.3)]"
+          className="absolute pointer-events-none rounded-sm z-(--z-marquee) bg-accent/10 border border-accent/30"
           style={{
             left: marquee.x,
             top: marquee.y,
@@ -789,7 +758,7 @@ export default function Canvas() {
 
       {/* Add note / image buttons */}
       {!canvasLocked && (
-        <div className="fixed bottom-6 right-6 flex gap-2 z-100">
+        <div className="fixed bottom-6 right-6 flex gap-2 z-(--z-fab)">
           <input
             ref={imageInputRef}
             type="file"
@@ -798,7 +767,7 @@ export default function Canvas() {
             onChange={handleImageInput}
           />
           <button
-            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
             title="Add image"
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={() => imageInputRef.current?.click()}
@@ -810,18 +779,9 @@ export default function Canvas() {
             </svg>
           </button>
           <button
-            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none bg-card text-text-muted shadow-[0_4px_12px_rgba(0,0,0,0.15)]"
+            className="w-12 h-12 rounded-full flex items-center justify-center text-2xl cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
             onDoubleClick={(e) => e.stopPropagation()}
-            onClick={async () => {
-              const t = getTransform();
-              const spread = 40;
-              const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
-              const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
-              const noteId = crypto.randomUUID();
-              triggerPop([noteId]);
-              undoStack.record({ type: "create", noteIds: [noteId] });
-              await addNote(canvasX, canvasY, noteId);
-            }}
+            onClick={createNoteAtViewportCenter}
           >
             +
           </button>

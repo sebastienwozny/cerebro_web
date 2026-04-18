@@ -1,4 +1,4 @@
-import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react";
+import { useEditor, EditorContent } from "@tiptap/react";
 import { DOMParser } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
@@ -6,70 +6,22 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
-import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
-import { createLowlight, common } from "lowlight";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
-import CodeBlockView from "./CodeBlockView";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBlockHandle } from "../hooks/useBlockHandle";
 import { useLinkMode } from "../hooks/useLinkMode";
+import { useEditorDragScroll } from "../hooks/useEditorDragScroll";
 import { Plus } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
-import { SLASH_COMMANDS } from "../lib/slashCommands";
+import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
 import { readImageFile } from "../lib/imageUtils";
+import { CodeBlockWithView, ImageWithAspect } from "../lib/editor/extensions";
 import FormatToolbar from "./FormatToolbar";
 import PlusMenu from "./PlusMenu";
-
-const lowlight = createLowlight(common);
-
-// CodeBlock with syntax highlighting + custom React NodeView (language picker,
-// copy button). Replaces StarterKit's default codeBlock. `as: 'pre'` makes the
-// outer NodeView element a <pre> so styling and handle positioning mirror a
-// plain code block (no nested wrapper div).
-const CodeBlockWithView = CodeBlockLowlight.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      wrap: {
-        default: false,
-        parseHTML: (el: HTMLElement) => el.getAttribute("data-wrap") === "true",
-        renderHTML: (attrs: Record<string, unknown>) =>
-          attrs.wrap ? { "data-wrap": "true" } : {},
-      },
-    };
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(CodeBlockView, { as: "pre" });
-  },
-}).configure({
-  lowlight,
-  defaultLanguage: "plaintext",
-});
-
-// Extend Tiptap Image to carry aspect ratio
-const ImageWithAspect = BaseImage.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      aspect: {
-        default: null,
-        parseHTML: (el: HTMLElement) => {
-          const v = el.getAttribute("data-aspect");
-          return v ? parseFloat(v) : null;
-        },
-        renderHTML: (attrs: Record<string, unknown>) => {
-          if (!attrs.aspect) return {};
-          return { "data-aspect": String(attrs.aspect) };
-        },
-      },
-    };
-  },
-});
 
 interface Props {
   blocks: NoteBlock[];
@@ -278,71 +230,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     }
   }, [editor, editable]);
 
-  // Fix: when a drag starts from the drag handle, clear any text selection
-  // so the extension creates a NodeSelection (whole block) instead of a
-  // partial TextSelection covering only bold/italic spans.
-  useEffect(() => {
-    if (!editor || !editable) return;
-
-    const onDragStart = (e: DragEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target?.dataset?.dragHandle && target?.dataset?.dragHandle !== "") return;
-      const { selection } = editor.state;
-      if (!selection.empty && !(selection instanceof NodeSelection)) {
-        // Clear the selection so the extension falls through to NodeSelection
-        const tr = editor.state.tr.setSelection(
-          NodeSelection.create(editor.state.doc, editor.state.selection.$from.before(1))
-        );
-        editor.view.dispatch(tr);
-      }
-    };
-
-    window.addEventListener("dragstart", onDragStart, true);
-    return () => window.removeEventListener("dragstart", onDragStart, true);
-  }, [editor, editable]);
-
-  // Auto-scroll the editor overlay while dragging a block. The extension's
-  // built-in drag-scroll acts on `window`, which does nothing here since the
-  // scrollable element is `[data-editor-overlay]` inside the note card. We
-  // mirror the behavior with a wider threshold for a comfier drop zone.
-  useEffect(() => {
-    if (!editor || !editable) return;
-    const overlay = editor.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
-    if (!overlay) return;
-    const THRESHOLD = 120;
-    const MAX_SPEED = 18;
-    let dragging = false;
-
-    const onDragStart = (e: DragEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t || !("dragHandle" in (t.dataset ?? {}))) return;
-      dragging = true;
-    };
-    const onDragEnd = () => { dragging = false; };
-    const onDrag = (e: DragEvent) => {
-      // Last `drag` event in a sequence often has clientY = 0 — skip it.
-      if (!dragging || e.clientY === 0) return;
-      const rect = overlay.getBoundingClientRect();
-      const topDist = e.clientY - rect.top;
-      const bottomDist = rect.bottom - e.clientY;
-      if (topDist < THRESHOLD && topDist >= 0) {
-        const factor = 1 - topDist / THRESHOLD;
-        overlay.scrollTop -= MAX_SPEED * factor;
-      } else if (bottomDist < THRESHOLD && bottomDist >= 0) {
-        const factor = 1 - bottomDist / THRESHOLD;
-        overlay.scrollTop += MAX_SPEED * factor;
-      }
-    };
-
-    window.addEventListener("dragstart", onDragStart, true);
-    window.addEventListener("dragend", onDragEnd, true);
-    window.addEventListener("drag", onDrag);
-    return () => {
-      window.removeEventListener("dragstart", onDragStart, true);
-      window.removeEventListener("dragend", onDragEnd, true);
-      window.removeEventListener("drag", onDrag);
-    };
-  }, [editor, editable]);
+  useEditorDragScroll(editor, editable);
 
   // Click below content to insert empty lines
   useEffect(() => {
@@ -473,8 +361,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       setShowPlusMenu(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      // Close button is the last item (index === SLASH_COMMANDS.length).
-      const maxIdx = SLASH_COMMANDS.length;
+      // Close button is the last item (index === BLOCK_DEFS.length).
+      const maxIdx = BLOCK_DEFS.length;
       if (e.key === "Escape") { e.stopPropagation(); setShowPlusMenu(false); return; }
       if (e.key === "ArrowDown") { e.preventDefault(); plusIdxRef.current = Math.min(plusIdxRef.current + 1, maxIdx); highlightPlusItem(); }
       if (e.key === "ArrowUp") { e.preventDefault(); plusIdxRef.current = Math.max(plusIdxRef.current - 1, 0); highlightPlusItem(); }
@@ -488,7 +376,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         }
         e.preventDefault();
         if (plusIdxRef.current === maxIdx) setShowPlusMenu(false);
-        else handlePlusSelect(SLASH_COMMANDS[plusIdxRef.current]);
+        else handlePlusSelect(BLOCK_DEFS[plusIdxRef.current]);
       }
       // Backspace with nothing picked — close the menu and let the editor
       // delete the previous character normally (mirrors the Enter case).
@@ -551,48 +439,22 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     });
   }
 
-  function applyBlockType(cmd: (typeof SLASH_COMMANDS)[number]) {
+  function applyBlockType(def: BlockDef) {
     if (!editor) return;
     const { $from } = editor.state.selection;
     const parentEmpty = $from.parent.content.size === 0;
 
-    if (parentEmpty) {
-      switch (cmd.type) {
-        case "heading1": editor.chain().focus().setHeading({ level: 1 }).run(); break;
-        case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
-        case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
-        // `toggle*` would convert back to a paragraph if we're already inside
-        // the target list/quote (e.g. after splitListItem from handlePlusClick).
-        case "bulletList": if (!editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run(); break;
-        case "orderedList": if (!editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run(); break;
-        case "todo": if (!editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run(); break;
-        case "quote": if (!editor.isActive("blockquote")) editor.chain().focus().toggleBlockquote().run(); break;
-        case "codeBlock": editor.chain().focus().setCodeBlock().run(); break;
-        case "hr": editor.chain().focus().setHorizontalRule().run(); break;
-        default: editor.chain().focus().setParagraph().run();
-      }
-    } else {
+    if (!parentEmpty) {
       const blockEnd = $from.after();
       editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
-      switch (cmd.type) {
-        case "heading1": editor.chain().focus().setHeading({ level: 1 }).run(); break;
-        case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
-        case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
-        case "bulletList": editor.chain().focus().toggleBulletList().run(); break;
-        case "orderedList": editor.chain().focus().toggleOrderedList().run(); break;
-        case "todo": editor.chain().focus().toggleTaskList().run(); break;
-        case "quote": editor.chain().focus().toggleBlockquote().run(); break;
-        case "codeBlock": editor.chain().focus().setCodeBlock().run(); break;
-        case "hr": editor.chain().focus().setHorizontalRule().run(); break;
-        default: break;
-      }
     }
+    def.apply?.(editor);
   }
 
-  function handlePlusSelect(cmd: (typeof SLASH_COMMANDS)[number]) {
+  function handlePlusSelect(def: BlockDef) {
     if (!editor) return;
 
-    if (cmd.type === "image") {
+    if (def.type === "image") {
       const { $from } = editor.state.selection;
       const parentEmpty = $from.parent.content.size === 0;
       if (parentEmpty) {
@@ -607,11 +469,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       }
       fileInputRef.current?.click();
     } else {
-      applyBlockType(cmd);
+      applyBlockType(def);
     }
 
-    // Ensure the editor keeps focus even when applyBlockType takes a no-op
-    // branch (e.g. selecting "Bullet List" while already in one).
+    // Ensure the editor keeps focus even when apply takes a no-op branch
+    // (e.g. selecting "Bullet List" while already in one).
     editor.commands.focus();
     setShowPlusMenu(false);
   }

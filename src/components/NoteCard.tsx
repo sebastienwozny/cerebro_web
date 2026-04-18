@@ -211,7 +211,7 @@ function NoteCard({
           top: visualTop,
           width: visualWidth,
           height: t > 0 ? visualHeight : cardH,
-          zIndex: openProgress > 0 ? 9999 : note.zOrder,
+          zIndex: openProgress > 0 ? "var(--z-card-open)" : note.zOrder,
           transform: isDeleting
             ? "scale(0)"
             : isDragging || isFollowing
@@ -245,12 +245,12 @@ function NoteCard({
             overflow: "hidden",
             cursor: isOpen ? "default" : isDragging ? "grabbing" : "grab",
             boxShadow: t > 0 || !shadowReady
-              ? "0 10px 20px -12px rgba(0,0,0,0), 0 32px 40px -8px rgba(0,0,0,0)"
+              ? "var(--shadow-card-invisible)"
               : isSelected && openProgress < 0.1
-                ? "0 0 0 8px var(--color-card), 0 4px 10px rgba(0,0,0,0.05)"
+                ? "var(--shadow-card-selected)"
                 : isHovered
-                  ? "0 20px 50px -10px rgba(0,0,0,0.08), 0 50px 140px -15px rgba(0,0,0,0.06)"
-                  : "0 10px 20px -12px rgba(0,0,0,0.05), 0 32px 40px -8px rgba(0,0,0,0.02)",
+                  ? "var(--shadow-card-hover)"
+                  : "var(--shadow-card-rest)",
             transition: "box-shadow 0.2s ease-out",
           }}
           onPointerDown={isResizing || spaceHeld ? undefined : (e) => { handlePointerDown(e); }}
@@ -351,7 +351,7 @@ function NoteCard({
       {/* Back button */}
       {openProgress > 0 && (
         <button
-          className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm z-10001 bg-[rgba(128,128,128,0.15)] text-text-muted"
+          className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm z-(--z-editor-controls) bg-back-button-bg text-text-muted"
           style={{
             left: lerp(-50, 20, t),
             opacity: t,
@@ -372,7 +372,7 @@ function NoteCard({
         <div
           ref={scrollRef}
           data-editor-overlay
-          className="fixed inset-0 overflow-y-auto flex justify-center z-10000 pt-30 pb-10 px-5"
+          className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-30 pb-10 px-5"
         >
           <div
             className={isImageCard ? "image-card-open" : undefined}
@@ -411,7 +411,7 @@ function NoteCard({
               width: lerp(cardW * scale, targetW, t),
               height: lerp(cardH * scale, targetH, t),
               objectFit: "cover",
-              zIndex: 10001,
+              zIndex: "var(--z-editor-controls)",
               pointerEvents: "none",
               // Target 6px to match `.tiptap img` border-radius so the hero
               // lands on the editor image without a visible radius snap.

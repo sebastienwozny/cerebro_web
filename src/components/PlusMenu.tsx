@@ -1,27 +1,12 @@
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
-import { Type, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code, Minus, ImageIcon } from "lucide-react";
-import { SLASH_COMMANDS } from "../lib/slashCommands";
-
-const META: Record<string, { icon: typeof Type; shortcut: string }> = {
-  text:        { icon: Type,        shortcut: "" },
-  heading1:    { icon: Heading1,    shortcut: "#" },
-  heading2:    { icon: Heading2,    shortcut: "##" },
-  heading3:    { icon: Heading3,    shortcut: "###" },
-  bulletList:  { icon: List,        shortcut: "-" },
-  orderedList: { icon: ListOrdered, shortcut: "1." },
-  todo:        { icon: ListChecks,  shortcut: "[]" },
-  quote:       { icon: Quote,       shortcut: ">" },
-  codeBlock:   { icon: Code,        shortcut: "```" },
-  hr:          { icon: Minus,       shortcut: "---" },
-  image:       { icon: ImageIcon,   shortcut: "/image" },
-};
+import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
 
 interface Props {
   contentLeft: number;
   lineBottom: number;
   lineH: number;
   flipUp: boolean;
-  onSelect: (cmd: (typeof SLASH_COMMANDS)[number]) => void;
+  onSelect: (def: BlockDef) => void;
   onClose: () => void;
   onHoverItem: (index: number) => void;
 }
@@ -41,7 +26,7 @@ const PlusMenu = forwardRef<HTMLDivElement, Props>(
     return (
     <div
       ref={ref}
-      className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-10005 min-w-[300px]"
+      className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-(--z-plus-menu) min-w-[300px]"
       style={{
         left: contentLeft,
         top: lineBottom + 8,
@@ -57,25 +42,24 @@ const PlusMenu = forwardRef<HTMLDivElement, Props>(
           onScroll={updateFades}
           className="flex flex-col max-h-[260px] overflow-y-auto"
         >
-        {SLASH_COMMANDS.map((cmd, i) => {
-          const meta = META[cmd.type] ?? { icon: Type, shortcut: "" };
-          const Icon = meta.icon;
+        {BLOCK_DEFS.map((def, i) => {
+          const Icon = def.icon;
           return (
             <button
-              key={cmd.type}
+              key={def.type}
               data-plus-item
               className="floating-item flex items-center gap-3 px-3 py-1.5 mx-1 rounded-lg border-none cursor-pointer select-none"
               onMouseDown={(e) => {
                 e.preventDefault();
-                onSelect(cmd);
+                onSelect(def);
               }}
               onMouseEnter={() => onHoverItem(i)}
             >
               <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
-              <span className="text-[14px] flex-1 text-left">{cmd.label}</span>
-              {meta.shortcut && (
+              <span className="text-[14px] flex-1 text-left">{def.label}</span>
+              {def.slashShortcut && (
                 <span className="floating-shortcut text-[11px] ml-4 font-semibold tracking-wide">
-                  {meta.shortcut}
+                  {def.slashShortcut}
                 </span>
               )}
             </button>
@@ -99,7 +83,7 @@ const PlusMenu = forwardRef<HTMLDivElement, Props>(
           e.preventDefault();
           onClose();
         }}
-        onMouseEnter={() => onHoverItem(SLASH_COMMANDS.length)}
+        onMouseEnter={() => onHoverItem(BLOCK_DEFS.length)}
       >
         <span className="text-[14px] flex-1 text-left">Close</span>
         <span className="floating-shortcut text-[11px] font-semibold tracking-wide">Esc</span>

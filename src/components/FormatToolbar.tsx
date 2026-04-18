@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
+import ToolbarButton from "./ToolbarButton";
 
 interface Props {
   editor: Editor | null;
@@ -72,43 +73,30 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
     return (
       <>
         <div
-          className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${formatTransitionClass}`}
+          className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-(--z-toolbar) ${formatTransitionClass}`}
         >
-          {formatButtons.map(({ icon: Icon, label, cmd, active, shortcut }, i) => (
-            <div
+          {formatButtons.map((b, i) => (
+            <ToolbarButton
               key={i}
-              className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108"
-              onMouseLeave={() => onSetFormatTooltips(true)}
-            >
-              <button
-                onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                className={`floating-btn ${active ? "is-active" : ""} w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none`}
-              >
-                <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
-              </button>
-              <div className={`app-tooltip floating-tooltip flex items-center gap-2 ${formatTooltips ? "group-hover:opacity-100" : ""}`}>
-                <span>{label}</span>
-                <span className="shortcut">{shortcut}</span>
-              </div>
-            </div>
+              icon={b.icon}
+              label={b.label}
+              shortcut={b.shortcut}
+              active={b.active}
+              tooltipsEnabled={formatTooltips}
+              onSetTooltipsEnabled={onSetFormatTooltips}
+              onClick={b.cmd}
+            />
           ))}
-          <div
-            className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-110"
-            onMouseLeave={() => onSetFormatTooltips(true)}
-          >
-            <button
-              onMouseDown={(e) => { e.preventDefault(); editor?.chain().focus().unsetAllMarks().run(); }}
-              className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
-            >
-              <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
-            </button>
-            <div className={`app-tooltip floating-tooltip ${formatTooltips ? "group-hover:opacity-100" : ""}`}>
-              Clear
-            </div>
-          </div>
+          <ToolbarButton
+            icon={Eraser}
+            label="Clear"
+            tooltipsEnabled={formatTooltips}
+            onSetTooltipsEnabled={onSetFormatTooltips}
+            onClick={() => editor?.chain().focus().unsetAllMarks().run()}
+          />
         </div>
         <div
-          className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-10002 ${linkTransitionClass}`}
+          className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-(--z-toolbar) ${linkTransitionClass}`}
         >
           <input
             ref={linkInputRef}
@@ -122,22 +110,15 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
             placeholder="Paste link..."
             className="floating-input h-10 px-3 border-none outline-none text-sm w-[220px]"
           />
-          {linkButtons.map(({ icon: Icon, label, cmd }, i) => (
-            <div
+          {linkButtons.map((b, i) => (
+            <ToolbarButton
               key={i}
-              className="relative group flex flex-col items-center transition-transform duration-120 ease-out hover:scale-108"
-              onMouseLeave={() => onSetLinkTooltips(true)}
-            >
-              <button
-                onMouseDown={(e) => { e.preventDefault(); cmd(); }}
-                className="floating-btn w-10 h-10 rounded-lg flex items-center justify-center border-none cursor-pointer select-none"
-              >
-                <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
-              </button>
-              <div className={`app-tooltip floating-tooltip ${linkTooltips ? "group-hover:opacity-100" : ""}`}>
-                {label}
-              </div>
-            </div>
+              icon={b.icon}
+              label={b.label}
+              tooltipsEnabled={linkTooltips}
+              onSetTooltipsEnabled={onSetLinkTooltips}
+              onClick={b.cmd}
+            />
           ))}
         </div>
       </>

@@ -8,10 +8,31 @@
   --color-text-primary: #e8e8e8;
   --color-text-muted: #888;
   --color-selection-border: rgba(255, 255, 255, 0.4);
+  --color-accent: #4a9eff;
+  --color-back-button-bg: rgba(128, 128, 128, 0.15);
   --color-code-bg: rgba(255, 255, 255, 0.03);
   --color-inline-code-text: #f2798a;
   --color-inline-code-bg: rgba(255, 255, 255, 0.06);
   --color-inline-code-border: rgba(255, 255, 255, 0.12);
+
+  /* ── Z-index scale ── */
+  --z-marquee: 9990;
+  --z-drag-over: 9997;
+  --z-card-overlay: 9998;
+  --z-card-open: 9999;
+  --z-editor-overlay: 10000;
+  --z-editor-controls: 10001;
+  --z-toolbar: 10002;
+  --z-context-menu: 10003;
+  --z-plus-menu: 10005;
+  --z-fab: 100;
+
+  /* ── Card shadows ── */
+  --shadow-card-invisible: 0 10px 20px -12px rgba(0, 0, 0, 0), 0 32px 40px -8px rgba(0, 0, 0, 0);
+  --shadow-card-rest: 0 10px 20px -12px rgba(0, 0, 0, 0.05), 0 32px 40px -8px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 20px 50px -10px rgba(0, 0, 0, 0.08), 0 50px 140px -15px rgba(0, 0, 0, 0.06);
+  --shadow-card-selected: 0 0 0 8px var(--color-card), 0 4px 10px rgba(0, 0, 0, 0.05);
+  --shadow-fab: 0 4px 12px rgba(0, 0, 0, 0.15);
   --color-checkbox-bg: #333;
   --color-checkbox-border: #555;
   --color-checkbox-checked: #ffffff;

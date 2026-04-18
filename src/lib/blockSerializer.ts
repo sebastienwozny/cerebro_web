@@ -42,6 +42,24 @@ function highlightCode(code: string, language: string | undefined): string {
   return hastToHtml(tree);
 }
 
+/** Collect consecutive blocks starting at `start` that share `type`. */
+function takeRun(blocks: NoteBlock[], start: number, type: BlockType): { items: NoteBlock[]; next: number } {
+  const items: NoteBlock[] = [blocks[start]];
+  let j = start + 1;
+  while (j < blocks.length && blocks[j].type === type) {
+    items.push(blocks[j]);
+    j++;
+  }
+  return { items, next: j };
+}
+
+function codeBlockAttrs(b: NoteBlock): { cls: string; wrap: string } {
+  return {
+    cls: b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "",
+    wrap: b.codeWrap ? ` data-wrap="true"` : "",
+  };
+}
+
 export function blocksToHtml(blocks: NoteBlock[]): string {
   const parts: string[] = [];
   let i = 0;
@@ -54,24 +72,19 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         parts.push(`<img src="${b.imageDataUrl}"${aspect} />`);
       }
       i++;
-    } else if (b.type === "bulletList") {
-      let items = `<li><p>${c}</p></li>`;
-      while (++i < blocks.length && blocks[i].type === "bulletList") {
-        items += `<li><p>${blocks[i].content}</p></li>`;
-      }
-      parts.push(`<ul>${items}</ul>`);
-    } else if (b.type === "orderedList") {
-      let items = `<li><p>${c}</p></li>`;
-      while (++i < blocks.length && blocks[i].type === "orderedList") {
-        items += `<li><p>${blocks[i].content}</p></li>`;
-      }
-      parts.push(`<ol>${items}</ol>`);
+    } else if (b.type === "bulletList" || b.type === "orderedList") {
+      const run = takeRun(blocks, i, b.type);
+      const tag = b.type === "bulletList" ? "ul" : "ol";
+      const items = run.items.map((x) => `<li><p>${x.content}</p></li>`).join("");
+      parts.push(`<${tag}>${items}</${tag}>`);
+      i = run.next;
     } else if (b.type === "todo") {
-      let items = `<li data-type="taskItem" data-checked="${b.isChecked}"><p>${c}</p></li>`;
-      while (++i < blocks.length && blocks[i].type === "todo") {
-        items += `<li data-type="taskItem" data-checked="${blocks[i].isChecked}"><p>${blocks[i].content}</p></li>`;
-      }
+      const run = takeRun(blocks, i, "todo");
+      const items = run.items
+        .map((x) => `<li data-type="taskItem" data-checked="${x.isChecked}"><p>${x.content}</p></li>`)
+        .join("");
       parts.push(`<ul data-type="taskList">${items}</ul>`);
+      i = run.next;
     } else {
       switch (b.type) {
         case "heading1": parts.push(`<h1>${c}</h1>`); break;
@@ -79,8 +92,7 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         case "heading3": parts.push(`<h3>${c}</h3>`); break;
         case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
         case "codeBlock": {
-          const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
-          const wrap = b.codeWrap ? ` data-wrap="true"` : "";
+          const { cls, wrap } = codeBlockAttrs(b);
           // Don't pre-highlight — TipTap's CodeBlockLowlight plugin applies
           // syntax highlighting as ProseMirror decorations at render time.
           // Embedding pre-highlighted spans here risks whitespace corruption
@@ -111,28 +123,22 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         parts.push(`<img src="${b.imageDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
       }
       i++;
-    } else if (b.type === "bulletList") {
-      let items = `<li><p>${c}</p></li>`;
-      while (++i < blocks.length && blocks[i].type === "bulletList") {
-        items += `<li><p>${blocks[i].content}</p></li>`;
-      }
-      parts.push(`<ul>${items}</ul>`);
-    } else if (b.type === "orderedList") {
-      let items = `<li><p>${c}</p></li>`;
-      while (++i < blocks.length && blocks[i].type === "orderedList") {
-        items += `<li><p>${blocks[i].content}</p></li>`;
-      }
-      parts.push(`<ol>${items}</ol>`);
+    } else if (b.type === "bulletList" || b.type === "orderedList") {
+      const run = takeRun(blocks, i, b.type);
+      const tag = b.type === "bulletList" ? "ul" : "ol";
+      const items = run.items.map((x) => `<li><p>${x.content}</p></li>`).join("");
+      parts.push(`<${tag}>${items}</${tag}>`);
+      i = run.next;
     } else if (b.type === "todo") {
-      const renderTodo = (block: NoteBlock) => {
-        const checked = block.isChecked ? "checked" : "";
-        return `<li data-type="taskItem" data-checked="${block.isChecked ?? false}"><label><input type="checkbox" ${checked}></label><div><p>${block.content}</p></div></li>`;
-      };
-      let items = renderTodo(b);
-      while (++i < blocks.length && blocks[i].type === "todo") {
-        items += renderTodo(blocks[i]);
-      }
+      const run = takeRun(blocks, i, "todo");
+      const items = run.items
+        .map((x) => {
+          const checked = x.isChecked ? "checked" : "";
+          return `<li data-type="taskItem" data-checked="${x.isChecked ?? false}"><label><input type="checkbox" ${checked}></label><div><p>${x.content}</p></div></li>`;
+        })
+        .join("");
       parts.push(`<ul data-type="taskList">${items}</ul>`);
+      i = run.next;
     } else {
       const fill = c || "<br>";
       switch (b.type) {
@@ -141,8 +147,7 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         case "heading3": parts.push(`<h3>${fill}</h3>`); break;
         case "quote": parts.push(`<blockquote><p>${fill}</p></blockquote>`); break;
         case "codeBlock": {
-          const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
-          const wrap = b.codeWrap ? ` data-wrap="true"` : "";
+          const { cls, wrap } = codeBlockAttrs(b);
           const highlighted = highlightCode(c, b.codeLanguage);
           parts.push(`<pre${wrap}><div class="code-block-scroll">`
             + `<code${cls}>${highlighted}</code></div></pre>`);

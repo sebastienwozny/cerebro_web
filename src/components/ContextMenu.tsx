@@ -63,7 +63,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
   return createPortal(
     <div
       ref={menuRef}
-      className="floating-menu-dropdown fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl z-10003 min-w-[200px]"
+      className="floating-menu-dropdown fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl z-(--z-context-menu) min-w-[200px]"
       style={{ left: x, top: y }}
     >
       {visibleItems.map((item, i) => {
