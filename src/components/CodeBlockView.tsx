@@ -107,26 +107,36 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
             ))}
           </select>
         </div>
-        <button
-          type="button"
-          className={`code-block-icon-btn${wrap ? " active" : ""}`}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => editor.isEditable && updateAttributes({ wrap: !wrap })}
-          disabled={!editor.isEditable}
-          aria-label={wrap ? "Disable word wrap" : "Enable word wrap"}
-          aria-pressed={wrap}
-        >
-          <WrapText className="w-3.5 h-3.5" strokeWidth={2} />
-        </button>
-        <button
-          type="button"
-          className="code-block-icon-btn"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={onCopy}
-          aria-label={copied ? "Copied" : "Copy"}
-        >
-          {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
-        </button>
+        <div className="code-block-btn-wrap">
+          <button
+            type="button"
+            className={`code-block-icon-btn${wrap ? " active" : ""}`}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => editor.isEditable && updateAttributes({ wrap: !wrap })}
+            disabled={!editor.isEditable}
+            aria-label={wrap ? "Disable word wrap" : "Enable word wrap"}
+            aria-pressed={wrap}
+          >
+            <WrapText className="w-3.5 h-3.5" strokeWidth={2} />
+          </button>
+          <div className="floating-tooltip code-block-btn-tooltip">
+            {wrap ? "No wrap" : "Wrap"}
+          </div>
+        </div>
+        <div className="code-block-btn-wrap">
+          <button
+            type="button"
+            className="code-block-icon-btn"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onCopy}
+            aria-label={copied ? "Copied" : "Copy"}
+          >
+            {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
+          </button>
+          <div className="floating-tooltip code-block-btn-tooltip">
+            {copied ? "Copied" : "Copy"}
+          </div>
+        </div>
       </div>
       {/* Wrap the code in its own scrollable div so the horizontal scrollbar
           lives here rather than on the outer <pre>. That keeps the scrollbar

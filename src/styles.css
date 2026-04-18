@@ -300,11 +300,6 @@ html, body, #root {
   border-radius: 8px;
   background: var(--color-code-bg);
   white-space: pre;
-  /* Clip the inner scrollable area to the rounded corners. The scrollbar
-     lives on `.code-block-body` (the inner NodeViewWrapper div / preview
-     wrapper) so a chunky native scrollbar can't visually escape past the
-     pre's border-radius. */
-  overflow: hidden;
   margin: 12px 0;
   transition: box-shadow 150ms, background 150ms;
 }
@@ -431,6 +426,9 @@ html, body, #root {
   outline: none;
   font: inherit;
 }
+.code-block-btn-wrap {
+  position: relative;
+}
 .code-block-icon-btn {
   display: flex;
   align-items: center;
@@ -454,6 +452,29 @@ html, body, #root {
 }
 .code-block-icon-btn:disabled {
   cursor: default;
+}
+/* Tooltip mirrors the FormatToolbar style (same pill/bg/font), but drops
+   below the button instead of above — the code-block header sits at the
+   top of the pre, so a top-flying tooltip would disappear upwards. */
+.code-block-btn-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms;
+  z-index: 1;
+}
+.code-block-btn-wrap:hover .code-block-btn-tooltip {
+  opacity: 1;
 }
 
 /* highlight.js — unified palette. Every language uses the same three
