@@ -320,10 +320,19 @@ html, body, #root {
   background: transparent;
   border-radius: 0;
   font-size: inherit;
-  /* Match TipTap's in-editor default so long lines wrap identically in the
-     static preview (which otherwise inherits `white-space: pre` from the
-     pre and clips/scrolls instead of wrapping). */
+}
+/* Wrap toggle — per-block, set by the header button via a `data-wrap`
+   attribute on the <pre>. When enabled, long lines wrap instead of
+   horizontally scrolling, and the code element follows (overriding the
+   default `white-space: pre` inherited from <pre>). Preview HTML carries
+   the same attribute so closed notes mirror the editor's wrap choice. */
+.tiptap pre[data-wrap="true"] {
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
+}
+.tiptap pre[data-wrap="true"] code {
+  white-space: inherit;
 }
 
 /* Code block header (language picker + copy button) — right-aligned.
@@ -382,7 +391,7 @@ html, body, #root {
   outline: none;
   font: inherit;
 }
-.code-block-copy {
+.code-block-icon-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -395,9 +404,16 @@ html, body, #root {
   cursor: pointer;
   transition: background 120ms, color 120ms;
 }
-.code-block-copy:hover {
+.code-block-icon-btn:hover {
   background: var(--floating-btn-hover-bg);
   color: var(--color-text-primary);
+}
+.code-block-icon-btn.active {
+  color: var(--color-text-primary);
+  background: var(--floating-btn-hover-bg);
+}
+.code-block-icon-btn:disabled {
+  cursor: default;
 }
 
 /* highlight.js — unified palette. Every language uses the same three

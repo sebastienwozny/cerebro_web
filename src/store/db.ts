@@ -23,6 +23,7 @@ export interface NoteBlock {
   imageDataUrl?: string; // base64 data URL (image blocks)
   imageAspect?: number;  // height / width  (image blocks)
   codeLanguage?: string; // hljs language id (codeBlock blocks)
+  codeWrap?: boolean;    // wrap long lines instead of horizontal scroll
 }
 
 // ── Note model ──

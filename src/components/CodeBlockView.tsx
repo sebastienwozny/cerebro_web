@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 import { NodeSelection } from "@tiptap/pm/state";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, WrapText } from "lucide-react";
 
 // Shown in the picker. Order matters — popular first.
 const LANGUAGES: Array<{ value: string; label: string }> = [
@@ -33,6 +33,7 @@ const LANGUAGES: Array<{ value: string; label: string }> = [
 export default function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const [copied, setCopied] = useState(false);
   const language = (node.attrs.language as string | null) ?? "plaintext";
+  const wrap = (node.attrs.wrap as boolean) ?? false;
   const label = LANGUAGES.find((l) => l.value === language)?.label ?? language;
 
   // Clicks on the pre's padding (not on the <code> text or the header) select
@@ -73,6 +74,7 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
     <NodeViewWrapper
       className="code-block-body"
       data-language={language}
+      data-wrap={wrap ? "true" : "false"}
     >
       <div className="code-block-header" contentEditable={false}>
         {/* Label sizes to the selected language; the <select> overlays it
@@ -94,7 +96,18 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
         </div>
         <button
           type="button"
-          className="code-block-copy"
+          className={`code-block-icon-btn${wrap ? " active" : ""}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => editor.isEditable && updateAttributes({ wrap: !wrap })}
+          disabled={!editor.isEditable}
+          aria-label={wrap ? "Disable word wrap" : "Enable word wrap"}
+          aria-pressed={wrap}
+        >
+          <WrapText className="w-3.5 h-3.5" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          className="code-block-icon-btn"
           onMouseDown={(e) => e.preventDefault()}
           onClick={onCopy}
           aria-label={copied ? "Copied" : "Copy"}

@@ -80,13 +80,14 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
         case "codeBlock": {
           const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
+          const wrap = b.codeWrap ? ` data-wrap="true"` : "";
           // Don't pre-highlight — TipTap's CodeBlockLowlight plugin applies
           // syntax highlighting as ProseMirror decorations at render time.
           // Embedding pre-highlighted spans here risks whitespace corruption
           // when the highlighter's hast tree drops text nodes between tokens
           // (hljs XML grammar, etc.), and those spans would be discarded on
           // parse anyway since the codeBlock schema only stores plain text.
-          parts.push(`<pre><code${cls}>${escapeHtml(c)}</code></pre>`);
+          parts.push(`<pre${wrap}><code${cls}>${escapeHtml(c)}</code></pre>`);
           break;
         }
         case "hr": parts.push(`<hr>`); break;
@@ -141,8 +142,9 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         case "quote": parts.push(`<blockquote><p>${fill}</p></blockquote>`); break;
         case "codeBlock": {
           const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
+          const wrap = b.codeWrap ? ` data-wrap="true"` : "";
           const highlighted = highlightCode(c, b.codeLanguage);
-          parts.push(`<pre><code${cls}>${highlighted}</code></pre>`);
+          parts.push(`<pre${wrap}><code${cls}>${highlighted}</code></pre>`);
           break;
         }
         case "hr": parts.push(`<hr>`); break;
@@ -228,11 +230,13 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
     } else if (node.type === "codeBlock") {
       const attrs = node.attrs as Record<string, unknown> | undefined;
       const lang = attrs?.language as string | undefined;
+      const wrap = attrs?.wrap === true;
       blocks.push({
         id: crypto.randomUUID(),
         type: "codeBlock",
         content: textContent(node),
         ...(lang ? { codeLanguage: lang } : {}),
+        ...(wrap ? { codeWrap: true } : {}),
       });
     } else if (node.type === "horizontalRule") {
       blocks.push({

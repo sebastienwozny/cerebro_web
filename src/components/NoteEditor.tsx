@@ -32,6 +32,17 @@ const lowlight = createLowlight(common);
 // outer NodeView element a <pre> so styling and handle positioning mirror a
 // plain code block (no nested wrapper div).
 const CodeBlockWithView = CodeBlockLowlight.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      wrap: {
+        default: false,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-wrap") === "true",
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.wrap ? { "data-wrap": "true" } : {},
+      },
+    };
+  },
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockView, { as: "pre" });
   },
