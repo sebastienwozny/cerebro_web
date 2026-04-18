@@ -9,6 +9,9 @@
   --color-text-muted: #888;
   --color-selection-border: rgba(255, 255, 255, 0.4);
   --color-code-bg: rgba(255, 255, 255, 0.03);
+  --color-inline-code-text: #f2798a;
+  --color-inline-code-bg: rgba(255, 255, 255, 0.06);
+  --color-inline-code-border: rgba(255, 255, 255, 0.12);
   --color-checkbox-bg: #333;
   --color-checkbox-border: #555;
   --color-checkbox-checked: #ffffff;
@@ -56,6 +59,9 @@
     --color-text-muted: #666;
     --color-selection-border: rgba(0, 0, 0, 0.12);
     --color-code-bg: rgba(0, 0, 0, 0.025);
+    --color-inline-code-text: #d72b3f;
+    --color-inline-code-bg: rgba(27, 31, 35, 0.04);
+    --color-inline-code-border: rgba(27, 31, 35, 0.1);
     --color-checkbox-bg: #ededed;
     --color-checkbox-border: #d1d1d1;
     --color-checkbox-checked: #1a1a1a;
@@ -233,6 +239,12 @@ html, body, #root {
   border: 1px solid var(--floating-border);
   box-shadow: var(--floating-shadow-dropdown);
 }
+.plus-menu-fade-top {
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--floating-bg) 60%, transparent), transparent);
+}
+.plus-menu-fade-bottom {
+  background: linear-gradient(to top, color-mix(in srgb, var(--floating-bg) 60%, transparent), transparent);
+}
 .floating-btn {
   color: var(--floating-text);
   background: transparent;
@@ -283,10 +295,12 @@ html, body, #root {
 /* Code — inline */
 .tiptap code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.9em;
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
-  background: var(--color-selection-border);
+  font-size: 0.85em;
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--color-inline-code-text);
+  background: var(--color-inline-code-bg);
+  border: 1px solid var(--color-inline-code-border);
 }
 /* Code — block (un-style the inline code inside the pre) */
 .tiptap pre {
@@ -294,9 +308,7 @@ html, body, #root {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 13px;
   line-height: 22px;
-  /* Top padding reserves room for the language picker / copy button header;
-     sides and bottom use the same 24px. */
-  padding: 44px 24px 22px;
+  padding: 34px;
   border-radius: 8px;
   background: var(--color-code-bg);
   white-space: pre;
@@ -353,8 +365,10 @@ html, body, #root {
 .tiptap pre code {
   padding: 0;
   background: transparent;
+  border: none;
   border-radius: 0;
   font-size: inherit;
+  color: inherit;
 }
 /* Wrap toggle — per-block, set by the header button via a `data-wrap`
    attribute on the <pre>. When enabled, long lines wrap instead of

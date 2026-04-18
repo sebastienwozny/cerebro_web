@@ -427,11 +427,18 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   enterLinkModeRef.current = enterLinkMode;
   linkOnSelectionChangeRef.current = onLinkSelectionChange;
 
-  // Drop the format-bar tooltips whenever link mode exits (so hovering the bar
-  // right after closing the link input doesn't flash tooltips at the user).
+  // Drop format-bar tooltips only when link mode *exits* (true → false), so
+  // hovering the bar right after closing the link input doesn't flash
+  // tooltips at the user's cursor. Re-enable whenever the toolbar hides, so
+  // the next selection starts with tooltips available on first hover.
+  const prevLinkMode = useRef(linkMode);
   useEffect(() => {
-    if (!linkMode) setFormatTooltips(false);
+    if (prevLinkMode.current && !linkMode) setFormatTooltips(false);
+    prevLinkMode.current = linkMode;
   }, [linkMode]);
+  useEffect(() => {
+    if (!showToolbar) setFormatTooltips(true);
+  }, [showToolbar]);
 
   // ── Block handle ("+" button next to focused block) ──
   const {
