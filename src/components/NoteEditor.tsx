@@ -44,14 +44,7 @@ const CodeBlockWithView = CodeBlockLowlight.extend({
     };
   },
   addNodeView() {
-    // `attrs` pulls each registered attribute's renderHTML output onto the
-    // outer <pre> (ReactNodeViewRenderer otherwise only renders them on the
-    // inner NodeViewWrapper div). Needed for `data-wrap` so `.tiptap pre[
-    // data-wrap="true"]` selectors actually match.
-    return ReactNodeViewRenderer(CodeBlockView, {
-      as: "pre",
-      attrs: ({ HTMLAttributes }) => HTMLAttributes,
-    });
+    return ReactNodeViewRenderer(CodeBlockView, { as: "pre" });
   },
 }).configure({
   lowlight,

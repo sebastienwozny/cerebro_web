@@ -59,6 +59,20 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
     return () => el.removeEventListener("mousedown", onDown, true);
   }, [editor, getPos, node]);
 
+  // Mirror the node's `wrap` attribute onto the outer <pre> as `data-wrap`
+  // so the CSS selector `.tiptap pre[data-wrap="true"]` can match. We do
+  // this imperatively rather than via ReactNodeViewRenderer's `attrs`
+  // option because the wrapper React element NodeViewWrapper renders sits
+  // *inside* the outer <pre>, not on it.
+  useEffect(() => {
+    const pos = getPos();
+    if (pos === undefined) return;
+    const el = editor.view.nodeDOM(pos) as HTMLElement | null;
+    if (!el) return;
+    if (wrap) el.setAttribute("data-wrap", "true");
+    else el.removeAttribute("data-wrap");
+  }, [editor, getPos, wrap]);
+
   async function onCopy() {
     const text = node.textContent;
     try {
