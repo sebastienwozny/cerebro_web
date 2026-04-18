@@ -128,7 +128,15 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
           {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
         </button>
       </div>
-      <NodeViewContent<"code"> as="code" className={`language-${language}`} />
+      {/* NodeViewContent hardcodes `white-space: pre-wrap` as an inline
+          style on the rendered element, which wins over any CSS rule and
+          means the editor's <code> would *always* wrap. Override it here
+          so the wrap toggle actually takes effect inside the editor. */}
+      <NodeViewContent<"code">
+        as="code"
+        className={`language-${language}`}
+        style={{ whiteSpace: wrap ? "pre-wrap" : "pre" }}
+      />
     </NodeViewWrapper>
   );
 }
