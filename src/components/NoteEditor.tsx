@@ -28,10 +28,12 @@ import PlusMenu from "./PlusMenu";
 const lowlight = createLowlight(common);
 
 // CodeBlock with syntax highlighting + custom React NodeView (language picker,
-// copy button). Replaces StarterKit's default codeBlock.
+// copy button). Replaces StarterKit's default codeBlock. `as: 'pre'` makes the
+// outer NodeView element a <pre> so styling and handle positioning mirror a
+// plain code block (no nested wrapper div).
 const CodeBlockWithView = CodeBlockLowlight.extend({
   addNodeView() {
-    return ReactNodeViewRenderer(CodeBlockView);
+    return ReactNodeViewRenderer(CodeBlockView, { as: "pre" });
   },
 }).configure({
   lowlight,
@@ -98,6 +100,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       Placeholder.configure({
         placeholder: ({ node }) => {
           if (node.type.name === "heading") return "Untitled";
+          // Code blocks have their own language picker / copy UI — no hint needed.
+          if (node.type.name === "codeBlock") return "";
           return "Press '/' for commands";
         },
         showOnlyCurrent: true,
@@ -126,9 +130,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       // flash the bar during a drag.
       const sel = !editor.state.selection.empty && !(editor.state.selection instanceof NodeSelection);
       setHasSelection(sel);
-      // Mirror selection state to the format bar — collapsing the selection
-      // (e.g. clicking elsewhere in the editor) should hide the bar.
-      setShowToolbar(sel);
+      // Selections inside a code block shouldn't get the prose format bar —
+      // bold/italic/link don't apply to raw code.
+      setShowToolbar(sel && !editor.isActive("codeBlock"));
       linkOnSelectionChangeRef.current(editor.isActive("link"));
     },
     editorProps: {
@@ -151,6 +155,23 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         }
 
         const text = event.clipboardData?.getData("text/plain");
+        const { $from } = view.state.selection;
+
+        // Inside a code block, always use text/plain. TipTap's default paste
+        // parses clipboard text/html, and the browser's HTML parser normalizes
+        // whitespace between sibling block tags — so pasting e.g. indented
+        // HTML/JSX would lose newlines that aren't immediately adjacent to
+        // text content. text/plain preserves the raw clipboard text as-is.
+        if ($from.parent.type.name === "codeBlock" && text) {
+          event.preventDefault();
+          const tr = view.state.tr.insertText(text);
+          view.dispatch(tr);
+          requestAnimationFrame(() => {
+            if (scrollEl) scrollEl.scrollTop = scrollTop;
+          });
+          return true;
+        }
+
         if (text && looksLikeMarkdown(text)) {
           event.preventDefault();
           const converted = markdownToHtml(text);
@@ -340,7 +361,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           // `.ProseMirror-selectednode` ring disappears. `blur()` alone keeps
           // the NodeSelection around.
           if (editor.state.selection instanceof NodeSelection) {
-            editor.commands.setTextSelection(editor.state.selection.from);
+            // Collapse to `.to` — the position right after the node. Using
+            // `.from` (right before) lands TextSelection.near() *inside*
+            // code blocks, which re-selects them instead of deselecting.
+            editor.commands.setTextSelection(editor.state.selection.to);
           }
           editor.commands.blur();
           setShowToolbar(false);

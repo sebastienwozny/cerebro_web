@@ -1,8 +1,45 @@
 import { useEditor } from "@tiptap/react";
+import { createLowlight, common } from "lowlight";
 import type { NoteBlock, BlockType } from "../store/db";
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Shared lowlight instance so the preview renders the same highlighted tokens
+// as the editor (which uses CodeBlockLowlight).
+const lowlight = createLowlight(common);
+
+type HastNode =
+  | { type: "root"; children: HastNode[] }
+  | { type: "element"; tagName: string; properties?: { className?: string[] }; children: HastNode[] }
+  | { type: "text"; value: string };
+
+function hastToHtml(node: HastNode): string {
+  if (node.type === "text") return escapeHtml(node.value);
+  if (node.type === "root") return node.children.map(hastToHtml).join("");
+  const cls = node.properties?.className?.join(" ") ?? "";
+  const attrs = cls ? ` class="${escapeHtml(cls)}"` : "";
+  return `<${node.tagName}${attrs}>${node.children.map(hastToHtml).join("")}</${node.tagName}>`;
+}
+
+function hastTextContent(node: HastNode): string {
+  if (node.type === "text") return node.value;
+  if (node.type === "root") return node.children.map(hastTextContent).join("");
+  return node.children.map(hastTextContent).join("");
+}
+
+function highlightCode(code: string, language: string | undefined): string {
+  if (!language || language === "plaintext") return escapeHtml(code);
+  if (!lowlight.listLanguages().includes(language)) return escapeHtml(code);
+  const tree = lowlight.highlight(language, code) as HastNode;
+  // highlight.js XML grammar (and a few others) occasionally drops the
+  // whitespace between adjacent tags — the text node simply isn't emitted
+  // in the hast tree. If the tokenizer's textContent doesn't match the raw
+  // code, fall back to an un-highlighted but correctly-whitespaced escape
+  // rather than render visually broken output.
+  if (hastTextContent(tree) !== code) return escapeHtml(code);
+  return hastToHtml(tree);
 }
 
 export function blocksToHtml(blocks: NoteBlock[]): string {
@@ -43,6 +80,12 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
         case "codeBlock": {
           const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
+          // Don't pre-highlight — TipTap's CodeBlockLowlight plugin applies
+          // syntax highlighting as ProseMirror decorations at render time.
+          // Embedding pre-highlighted spans here risks whitespace corruption
+          // when the highlighter's hast tree drops text nodes between tokens
+          // (hljs XML grammar, etc.), and those spans would be discarded on
+          // parse anyway since the codeBlock schema only stores plain text.
           parts.push(`<pre><code${cls}>${escapeHtml(c)}</code></pre>`);
           break;
         }
@@ -98,7 +141,8 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         case "quote": parts.push(`<blockquote><p>${fill}</p></blockquote>`); break;
         case "codeBlock": {
           const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
-          parts.push(`<pre><code${cls}>${escapeHtml(c)}</code></pre>`);
+          const highlighted = highlightCode(c, b.codeLanguage);
+          parts.push(`<pre><code${cls}>${highlighted}</code></pre>`);
           break;
         }
         case "hr": parts.push(`<hr>`); break;

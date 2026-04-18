@@ -46,6 +46,10 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
       const paddingTop = parseInt(cs.paddingTop, 10) || 0;
       const rect = found.getBoundingClientRect();
       let top = rect.top + paddingTop + (lineHeight - 24) / 2;
+      // Code blocks: center the handle vertically in the pre's top padding
+      // (the reserved header area), so it sits alongside the language picker
+      // and copy button rather than next to the first line of code.
+      if (found.matches("pre")) top = rect.top + (paddingTop - 24) / 2;
       // Task items: the checkbox sits 5px lower than text baseline
       // (via `label { margin-top: 5px }`), so align handles to its center instead.
       if (found.matches('ul[data-type="taskList"] li')) {

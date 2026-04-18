@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { NodeSelection } from "@tiptap/pm/state";
 import { Copy, Check } from "lucide-react";
 
 // Shown in the picker. Order matters — popular first.
@@ -29,9 +30,33 @@ const LANGUAGES: Array<{ value: string; label: string }> = [
   { value: "diff", label: "Diff" },
 ];
 
-export default function CodeBlockView({ node, updateAttributes, editor }: NodeViewProps) {
+export default function CodeBlockView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const [copied, setCopied] = useState(false);
   const language = (node.attrs.language as string | null) ?? "plaintext";
+  const label = LANGUAGES.find((l) => l.value === language)?.label ?? language;
+
+  // Clicks on the pre's padding (not on the <code> text or the header) select
+  // the whole block so the user can delete it. Must use a native capture-phase
+  // listener — React synthetic events can't stop ProseMirror's native mousedown
+  // handler from placing a text cursor and overriding the NodeSelection.
+  useEffect(() => {
+    const pos = getPos();
+    if (pos === undefined) return;
+    const el = editor.view.nodeDOM(pos) as HTMLElement | null;
+    if (!el) return;
+    const onDown = (e: MouseEvent) => {
+      if (e.target !== el) return;
+      const currentPos = getPos();
+      if (currentPos === undefined) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const tr = editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, currentPos));
+      editor.view.dispatch(tr);
+      editor.view.focus();
+    };
+    el.addEventListener("mousedown", onDown, true);
+    return () => el.removeEventListener("mousedown", onDown, true);
+  }, [editor, getPos, node]);
 
   async function onCopy() {
     const text = node.textContent;
@@ -45,18 +70,28 @@ export default function CodeBlockView({ node, updateAttributes, editor }: NodeVi
   }
 
   return (
-    <NodeViewWrapper as="pre" className="code-block" data-language={language}>
+    <NodeViewWrapper
+      className="code-block-body"
+      data-language={language}
+    >
       <div className="code-block-header" contentEditable={false}>
-        <select
-          className="code-block-lang"
-          value={language}
-          disabled={!editor.isEditable}
-          onChange={(e) => updateAttributes({ language: e.target.value })}
-        >
-          {LANGUAGES.map((l) => (
-            <option key={l.value} value={l.value}>{l.label}</option>
-          ))}
-        </select>
+        {/* Label sizes to the selected language; the <select> overlays it
+            invisibly so the picker stays functional without sizing the box
+            to the widest option in the list. */}
+        <div className="code-block-lang-wrap">
+          <span className="code-block-lang-label">{label}</span>
+          <select
+            className="code-block-lang"
+            value={language}
+            disabled={!editor.isEditable}
+            onChange={(e) => updateAttributes({ language: e.target.value })}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>{l.label}</option>
+            ))}
+          </select>
+        </div>
         <button
           type="button"
           className="code-block-copy"

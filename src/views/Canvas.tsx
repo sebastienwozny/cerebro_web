@@ -760,14 +760,16 @@ export default function Canvas() {
             onDragEnd={handleDragEnd}
             onBringToFront={bringToFront}
           >
-            <NoteEditor
-              blocks={note.blocks}
-              onUpdate={(blocks) => {
-                const title = blocks.find(b => b.type !== "image")?.content ?? "";
-                updateNote(note.id, { blocks, title });
-              }}
-              editable={openProgress >= 1}
-            />
+            <div style={{ "--open-progress": openProgress } as React.CSSProperties}>
+              <NoteEditor
+                blocks={note.blocks}
+                onUpdate={(blocks) => {
+                  const title = blocks.find(b => b.type !== "image")?.content ?? "";
+                  updateNote(note.id, { blocks, title });
+                }}
+                editable={openProgress >= 1}
+              />
+            </div>
           </NoteCard>
         </div>
       ))}

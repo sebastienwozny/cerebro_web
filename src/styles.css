@@ -8,6 +8,7 @@
   --color-text-primary: #e8e8e8;
   --color-text-muted: #888;
   --color-selection-border: rgba(255, 255, 255, 0.4);
+  --color-code-bg: rgba(255, 255, 255, 0.03);
   --color-checkbox-bg: #333;
   --color-checkbox-border: #555;
   --color-checkbox-checked: #ffffff;
@@ -54,6 +55,7 @@
     --color-text-primary: #1a1a1a;
     --color-text-muted: #666;
     --color-selection-border: rgba(0, 0, 0, 0.12);
+    --color-code-bg: rgba(0, 0, 0, 0.025);
     --color-checkbox-bg: #ededed;
     --color-checkbox-border: #d1d1d1;
     --color-checkbox-checked: #1a1a1a;
@@ -290,54 +292,95 @@ html, body, #root {
 .tiptap pre {
   position: relative;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.9em;
-  padding: 12px 14px;
-  padding-top: 36px;
-  border-radius: 6px;
-  background: var(--color-selection-border);
+  font-size: 13px;
+  line-height: 22px;
+  /* Top padding reserves room for the language picker / copy button header;
+     sides and bottom use the same 24px. */
+  padding: 44px 24px 22px;
+  border-radius: 8px;
+  background: var(--color-code-bg);
   white-space: pre;
   overflow-x: auto;
-  margin: 8px 0;
+  margin: 12px 0;
+  transition: box-shadow 150ms, background 150ms;
+}
+/* NodeSelection — click on padding / drag-handle / keyboard select. */
+.tiptap pre.ProseMirror-selectednode,
+.tiptap pre:has(.ProseMirror-selectednode) {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+@media (prefers-color-scheme: light) {
+  .tiptap pre.ProseMirror-selectednode,
+  .tiptap pre:has(.ProseMirror-selectednode) {
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  }
 }
 .tiptap pre code {
   padding: 0;
   background: transparent;
   border-radius: 0;
   font-size: inherit;
+  /* Match TipTap's in-editor default so long lines wrap identically in the
+     static preview (which otherwise inherits `white-space: pre` from the
+     pre and clips/scrolls instead of wrapping). */
+  white-space: pre-wrap;
 }
 
-/* Code block header (language picker + copy button) */
+/* Code block header (language picker + copy button) — right-aligned.
+   Opacity tracks the card's open progress so the header fades in/out with
+   the open/close animation instead of popping when the editor (un)mounts. */
 .code-block-header {
   position: absolute;
-  top: 6px;
-  right: 6px;
-  left: 6px;
+  top: 10px;
+  right: 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
   user-select: none;
+  opacity: var(--open-progress, 1);
 }
-.code-block-lang {
+/* The wrapper sizes to the visible label; the native <select> overlays it
+   at opacity 0 so the picker still works but doesn't force the box to the
+   widest option. */
+.code-block-lang-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: background 120ms, border-color 120ms, color 120ms;
+}
+.code-block-lang-wrap:hover {
+  background: var(--floating-btn-hover-bg);
+}
+.code-block-lang-wrap:hover .code-block-lang-label {
+  color: var(--color-text-primary);
+}
+.code-block-lang-wrap:focus-within {
+  border-color: var(--floating-border);
+}
+.code-block-lang-label {
   font-family: inherit;
   font-size: 11px;
   line-height: 1;
   padding: 3px 6px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background: transparent;
   color: var(--color-text-muted);
+  text-transform: lowercase;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.code-block-lang {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
   appearance: none;
   outline: none;
-  text-transform: lowercase;
-}
-.code-block-lang:hover {
-  background: var(--floating-btn-hover-bg);
-  color: var(--color-text-primary);
-}
-.code-block-lang:focus-visible {
-  border-color: var(--floating-border);
+  font: inherit;
 }
 .code-block-copy {
   display: flex;
@@ -351,47 +394,66 @@ html, body, #root {
   color: var(--color-text-muted);
   cursor: pointer;
   transition: background 120ms, color 120ms;
-  opacity: 0;
-}
-.tiptap pre:hover .code-block-copy {
-  opacity: 1;
 }
 .code-block-copy:hover {
   background: var(--floating-btn-hover-bg);
   color: var(--color-text-primary);
 }
 
-/* highlight.js token colors — works in both light and dark via
-   color tokens that flip with @media (prefers-color-scheme: light). */
+/* highlight.js — unified palette. Every language uses the same three
+   buckets (keyword / literal / comment) so the theme reads the same
+   regardless of grammar. Colors flip for light mode below. */
 .hljs-comment, .hljs-quote { color: var(--color-text-muted); font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #c586c0; }
-.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string { color: #ce9178; }
-.hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo { color: #b5cea8; }
-.hljs-title, .hljs-section, .hljs-built_in, .hljs-name, .hljs-symbol, .hljs-bullet, .hljs-meta { color: #dcdcaa; }
-.hljs-tag, .hljs-formula, .hljs-selector-id { color: #569cd6; }
-.hljs-attr, .hljs-params, .hljs-property { color: #9cdcfe; }
-.hljs-deletion { color: #f48771; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag,
+.hljs-type, .hljs-built_in, .hljs-tag, .hljs-name,
+.hljs-title, .hljs-section, .hljs-selector-id, .hljs-selector-class,
+.hljs-meta { color: #8ab4f8; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string,
+.hljs-number, .hljs-variable, .hljs-template-variable,
+.hljs-attr, .hljs-property, .hljs-params, .hljs-symbol, .hljs-bullet,
+.hljs-selector-attr, .hljs-selector-pseudo, .hljs-formula { color: #d4a27a; }
+.hljs-deletion { color: #f48771; text-decoration: line-through; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 @media (prefers-color-scheme: light) {
   .hljs-comment, .hljs-quote { color: #6a737d; }
-  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #af00db; }
-  .hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string { color: #a31515; }
-  .hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo { color: #098658; }
-  .hljs-title, .hljs-section, .hljs-built_in, .hljs-name, .hljs-symbol, .hljs-bullet, .hljs-meta { color: #795e26; }
-  .hljs-tag, .hljs-formula, .hljs-selector-id { color: #0000ff; }
-  .hljs-attr, .hljs-params, .hljs-property { color: #001080; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag,
+  .hljs-type, .hljs-built_in, .hljs-tag, .hljs-name,
+  .hljs-title, .hljs-section, .hljs-selector-id, .hljs-selector-class,
+  .hljs-meta { color: #1955b3; }
+  .hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string,
+  .hljs-number, .hljs-variable, .hljs-template-variable,
+  .hljs-attr, .hljs-property, .hljs-params, .hljs-symbol, .hljs-bullet,
+  .hljs-selector-attr, .hljs-selector-pseudo, .hljs-formula { color: #a3621f; }
   .hljs-deletion { color: #b31d28; }
 }
 
-/* Horizontal rule */
+/* Horizontal rule — the <hr> gives itself a paragraph-height hit area so it's
+   easy to click; the visible 1px line is centered via a pseudo-element. */
 .tiptap hr {
+  position: relative;
   border: none;
-  border-top: 1px solid var(--color-selection-border);
-  margin: 28px 0;
+  height: 26px;
+  margin: 14px 0;
+  cursor: pointer;
+}
+.tiptap hr::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--color-selection-border);
 }
 .tiptap hr.ProseMirror-selectednode {
-  border-top-color: var(--color-text-muted);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+@media (prefers-color-scheme: light) {
+  .tiptap hr.ProseMirror-selectednode {
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+  }
 }
 
 /* Images in editor */
