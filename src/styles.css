@@ -426,8 +426,39 @@ html, body, #root {
   outline: none;
   font: inherit;
 }
+/* Shared tooltip pill — used by FormatToolbar and any icon button that
+   needs a floating label. Pair with `.floating-tooltip` (for bg/colour/
+   border via CSS vars) and a parent hover trigger. Explicit line-height
+   and font-family so the pill renders the same inside monospace/pre
+   contexts as it does in the app shell. Wrapped in @layer components so
+   Tailwind utilities (e.g. group-hover:opacity-100) can still override. */
+@layer components {
+  .app-tooltip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-bottom: 12px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 9px;
+    line-height: 1.5;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+  }
+}
 .code-block-btn-wrap {
   position: relative;
+}
+.code-block-btn-wrap:hover .app-tooltip {
+  opacity: 1;
 }
 .code-block-icon-btn {
   display: flex;
@@ -452,31 +483,6 @@ html, body, #root {
 }
 .code-block-icon-btn:disabled {
   cursor: default;
-}
-/* Tooltip mirrors the FormatToolbar style exactly (same pill/bg/font/shadow)
-   and sits above the button. */
-.code-block-btn-tooltip {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 12px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 9px;
-  line-height: 1;
-  font-weight: 600;
-  text-transform: uppercase;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 150ms;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  z-index: 10;
-}
-.code-block-btn-wrap:hover .code-block-btn-tooltip {
-  opacity: 1;
 }
 
 /* highlight.js — unified palette. Every language uses the same three

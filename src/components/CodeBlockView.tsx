@@ -119,7 +119,7 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
           >
             <WrapText className="w-3.5 h-3.5" strokeWidth={2} />
           </button>
-          <div className="floating-tooltip code-block-btn-tooltip">
+          <div className="floating-tooltip app-tooltip">
             {wrap ? "No wrap" : "Wrap"}
           </div>
         </div>
@@ -133,7 +133,7 @@ export default function CodeBlockView({ node, updateAttributes, editor, getPos }
           >
             {copied ? <Check className="w-3.5 h-3.5" strokeWidth={2.5} /> : <Copy className="w-3.5 h-3.5" strokeWidth={2} />}
           </button>
-          <div className="floating-tooltip code-block-btn-tooltip">
+          <div className="floating-tooltip app-tooltip">
             {copied ? "Copied" : "Copy"}
           </div>
         </div>

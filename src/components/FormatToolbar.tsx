@@ -86,7 +86,7 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
               >
                 <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
               </button>
-              <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg flex items-center gap-2`}>
+              <div className={`app-tooltip floating-tooltip flex items-center gap-2 ${formatTooltips ? "group-hover:opacity-100" : ""}`}>
                 <span>{label}</span>
                 <span className="shortcut">{shortcut}</span>
               </div>
@@ -102,7 +102,7 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
             >
               <Eraser className="w-4 h-[18px]" strokeWidth={2.5} />
             </button>
-            <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${formatTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
+            <div className={`app-tooltip floating-tooltip ${formatTooltips ? "group-hover:opacity-100" : ""}`}>
               Clear
             </div>
           </div>
@@ -134,7 +134,7 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
               >
                 <Icon className="w-4 h-[18px]" strokeWidth={2.5} />
               </button>
-              <div className={`floating-tooltip absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-2 py-1 rounded-lg text-[9px] font-semibold uppercase whitespace-nowrap opacity-0 ${linkTooltips ? "group-hover:opacity-100" : ""} pointer-events-none transition-opacity duration-150 shadow-lg`}>
+              <div className={`app-tooltip floating-tooltip ${linkTooltips ? "group-hover:opacity-100" : ""}`}>
                 {label}
               </div>
             </div>
