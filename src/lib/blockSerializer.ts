@@ -23,6 +23,12 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         items += `<li><p>${blocks[i].content}</p></li>`;
       }
       parts.push(`<ul>${items}</ul>`);
+    } else if (b.type === "orderedList") {
+      let items = `<li><p>${c}</p></li>`;
+      while (++i < blocks.length && blocks[i].type === "orderedList") {
+        items += `<li><p>${blocks[i].content}</p></li>`;
+      }
+      parts.push(`<ol>${items}</ol>`);
     } else if (b.type === "todo") {
       let items = `<li data-type="taskItem" data-checked="${b.isChecked}"><p>${c}</p></li>`;
       while (++i < blocks.length && blocks[i].type === "todo") {
@@ -35,6 +41,12 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
         case "heading2": parts.push(`<h2>${c}</h2>`); break;
         case "heading3": parts.push(`<h3>${c}</h3>`); break;
         case "quote": parts.push(`<blockquote><p>${c}</p></blockquote>`); break;
+        case "codeBlock": {
+          const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
+          parts.push(`<pre><code${cls}>${escapeHtml(c)}</code></pre>`);
+          break;
+        }
+        case "hr": parts.push(`<hr>`); break;
         default: parts.push(`<p>${c || ""}</p>`);
       }
       i++;
@@ -61,6 +73,12 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         items += `<li><p>${blocks[i].content}</p></li>`;
       }
       parts.push(`<ul>${items}</ul>`);
+    } else if (b.type === "orderedList") {
+      let items = `<li><p>${c}</p></li>`;
+      while (++i < blocks.length && blocks[i].type === "orderedList") {
+        items += `<li><p>${blocks[i].content}</p></li>`;
+      }
+      parts.push(`<ol>${items}</ol>`);
     } else if (b.type === "todo") {
       const renderTodo = (block: NoteBlock) => {
         const checked = block.isChecked ? "checked" : "";
@@ -78,6 +96,12 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
         case "heading2": parts.push(`<h2>${fill}</h2>`); break;
         case "heading3": parts.push(`<h3>${fill}</h3>`); break;
         case "quote": parts.push(`<blockquote><p>${fill}</p></blockquote>`); break;
+        case "codeBlock": {
+          const cls = b.codeLanguage ? ` class="language-${escapeHtml(b.codeLanguage)}"` : "";
+          parts.push(`<pre><code${cls}>${escapeHtml(c)}</code></pre>`);
+          break;
+        }
+        case "hr": parts.push(`<hr>`); break;
         default: parts.push(`<p>${fill}</p>`);
       }
       i++;
@@ -108,6 +132,7 @@ function inlineHtml(node: Record<string, unknown>): string {
             case "italic": html = `<em>${html}</em>`; break;
             case "underline": html = `<u>${html}</u>`; break;
             case "strike": html = `<s>${html}</s>`; break;
+            case "code": html = `<code>${html}</code>`; break;
             case "link": {
               const href = escapeHtml((mark.attrs?.href as string) || "");
               const target = mark.attrs?.target ? ` target="${escapeHtml(mark.attrs.target as string)}"` : "";
@@ -147,6 +172,30 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
           content: p ? p.map(n => inlineHtml(n)).join("") : textContent(li),
         });
       }
+    } else if (node.type === "orderedList") {
+      for (const li of node.content ?? []) {
+        const p = (li as Record<string, unknown>).content as Record<string, unknown>[] | undefined;
+        blocks.push({
+          id: crypto.randomUUID(),
+          type: "orderedList",
+          content: p ? p.map(n => inlineHtml(n)).join("") : textContent(li),
+        });
+      }
+    } else if (node.type === "codeBlock") {
+      const attrs = node.attrs as Record<string, unknown> | undefined;
+      const lang = attrs?.language as string | undefined;
+      blocks.push({
+        id: crypto.randomUUID(),
+        type: "codeBlock",
+        content: textContent(node),
+        ...(lang ? { codeLanguage: lang } : {}),
+      });
+    } else if (node.type === "horizontalRule") {
+      blocks.push({
+        id: crypto.randomUUID(),
+        type: "hr",
+        content: "",
+      });
     } else if (node.type === "taskList") {
       for (const li of node.content ?? []) {
         const p = (li as Record<string, unknown>).content as Record<string, unknown>[] | undefined;

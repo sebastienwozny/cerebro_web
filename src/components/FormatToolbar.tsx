@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import type { Editor } from "@tiptap/react";
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
 
 interface Props {
   editor: Editor | null;
@@ -50,6 +50,7 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
       { icon: Italic, label: "Italic", cmd: () => editor?.chain().focus().toggleItalic().run(), active: editor?.isActive("italic"), shortcut: "⌘I" },
       { icon: UnderlineIcon, label: "Underline", cmd: () => editor?.chain().focus().toggleUnderline().run(), active: editor?.isActive("underline"), shortcut: "⌘U" },
       { icon: Strikethrough, label: "Strikethrough", cmd: () => editor?.chain().focus().toggleStrike().run(), active: editor?.isActive("strike"), shortcut: "⌘⇧X" },
+      { icon: Code, label: "Code", cmd: () => editor?.chain().focus().toggleCode().run(), active: editor?.isActive("code"), shortcut: "⌘E" },
       { icon: Link2, label: "Link", cmd: onEnterLinkMode, active: editor?.isActive("link"), shortcut: "⌘K" },
     ];
 

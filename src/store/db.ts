@@ -8,8 +8,11 @@ export type BlockType =
   | "heading2"
   | "heading3"
   | "bulletList"
+  | "orderedList"
   | "todo"
   | "quote"
+  | "codeBlock"
+  | "hr"
   | "image";
 
 export interface NoteBlock {
@@ -19,6 +22,7 @@ export interface NoteBlock {
   isChecked?: boolean;
   imageDataUrl?: string; // base64 data URL (image blocks)
   imageAspect?: number;  // height / width  (image blocks)
+  codeLanguage?: string; // hljs language id (codeBlock blocks)
 }
 
 // ── Note model ──

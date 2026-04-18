@@ -7,8 +7,11 @@ export const SLASH_COMMANDS: { label: string; type: BlockType }[] = [
   { label: "Heading 2", type: "heading2" },
   { label: "Heading 3", type: "heading3" },
   { label: "Bullet List", type: "bulletList" },
+  { label: "Ordered List", type: "orderedList" },
   { label: "To-Do", type: "todo" },
   { label: "Quote", type: "quote" },
+  { label: "Code Block", type: "codeBlock" },
+  { label: "Divider", type: "hr" },
   { label: "Image", type: "image" },
 ];
 
@@ -29,11 +32,20 @@ export function executeSlashCommand(editor: Editor, cmd: (typeof SLASH_COMMANDS)
     case "bulletList":
       editor.chain().focus().toggleBulletList().run();
       break;
+    case "orderedList":
+      editor.chain().focus().toggleOrderedList().run();
+      break;
     case "todo":
       editor.chain().focus().toggleTaskList().run();
       break;
     case "quote":
       editor.chain().focus().toggleBlockquote().run();
+      break;
+    case "codeBlock":
+      editor.chain().focus().setCodeBlock().run();
+      break;
+    case "hr":
+      editor.chain().focus().setHorizontalRule().run();
       break;
     default:
       editor.chain().focus().setParagraph().run();

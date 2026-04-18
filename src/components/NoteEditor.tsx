@@ -1,4 +1,4 @@
-import { useEditor, EditorContent } from "@tiptap/react";
+import { useEditor, EditorContent, ReactNodeViewRenderer } from "@tiptap/react";
 import { DOMParser } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
@@ -8,8 +8,11 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import BaseImage from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { createLowlight, common } from "lowlight";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
+import CodeBlockView from "./CodeBlockView";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBlockHandle } from "../hooks/useBlockHandle";
 import { useLinkMode } from "../hooks/useLinkMode";
@@ -21,6 +24,19 @@ import { SLASH_COMMANDS } from "../lib/slashCommands";
 import { readImageFile } from "../lib/imageUtils";
 import FormatToolbar from "./FormatToolbar";
 import PlusMenu from "./PlusMenu";
+
+const lowlight = createLowlight(common);
+
+// CodeBlock with syntax highlighting + custom React NodeView (language picker,
+// copy button). Replaces StarterKit's default codeBlock.
+const CodeBlockWithView = CodeBlockLowlight.extend({
+  addNodeView() {
+    return ReactNodeViewRenderer(CodeBlockView);
+  },
+}).configure({
+  lowlight,
+  defaultLanguage: "plaintext",
+});
 
 // Extend Tiptap Image to carry aspect ratio
 const ImageWithAspect = BaseImage.extend({
@@ -76,7 +92,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           HTMLAttributes: { class: "editor-link" },
         },
         dropcursor: { color: "#d4d4d4", width: 2 },
+        codeBlock: false,
       }),
+      CodeBlockWithView,
       Placeholder.configure({
         placeholder: ({ node }) => {
           if (node.type.name === "heading") return "Untitled";
@@ -504,8 +522,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         // `toggle*` would convert back to a paragraph if we're already inside
         // the target list/quote (e.g. after splitListItem from handlePlusClick).
         case "bulletList": if (!editor.isActive("bulletList")) editor.chain().focus().toggleBulletList().run(); break;
+        case "orderedList": if (!editor.isActive("orderedList")) editor.chain().focus().toggleOrderedList().run(); break;
         case "todo": if (!editor.isActive("taskList")) editor.chain().focus().toggleTaskList().run(); break;
         case "quote": if (!editor.isActive("blockquote")) editor.chain().focus().toggleBlockquote().run(); break;
+        case "codeBlock": editor.chain().focus().setCodeBlock().run(); break;
+        case "hr": editor.chain().focus().setHorizontalRule().run(); break;
         default: editor.chain().focus().setParagraph().run();
       }
     } else {
@@ -516,8 +537,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         case "heading2": editor.chain().focus().setHeading({ level: 2 }).run(); break;
         case "heading3": editor.chain().focus().setHeading({ level: 3 }).run(); break;
         case "bulletList": editor.chain().focus().toggleBulletList().run(); break;
+        case "orderedList": editor.chain().focus().toggleOrderedList().run(); break;
         case "todo": editor.chain().focus().toggleTaskList().run(); break;
         case "quote": editor.chain().focus().toggleBlockquote().run(); break;
+        case "codeBlock": editor.chain().focus().setCodeBlock().run(); break;
+        case "hr": editor.chain().focus().setHorizontalRule().run(); break;
         default: break;
       }
     }
@@ -578,11 +602,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           onApplyLink={applyLink}
           onRemoveLink={removeLink}
           onLinkUrlChange={setLinkUrl}
-          onExitLinkMode={() => {
-            setLinkMode(false);
-            setLinkUrl("");
-            linkManualRef.current = false;
-          }}
+          onExitLinkMode={exitLinkMode}
           onSetFormatTooltips={setFormatTooltips}
           onSetLinkTooltips={setLinkTooltips}
         />,

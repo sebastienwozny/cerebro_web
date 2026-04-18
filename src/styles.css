@@ -159,8 +159,10 @@ html, body, #root {
 
 /* Lists — aligned with checkboxes, no indent */
 .tiptap ul, .tiptap ol { padding-left: 0; margin-bottom: 24px; list-style: none; }
+.tiptap ol { counter-reset: ol-item; }
 .tiptap li { line-height: 26px; margin-bottom: 4px; display: flex; align-items: flex-start; gap: 8px; }
 .tiptap ul:not([data-type="taskList"]) li::before { content: "•"; color: #c8c8c8; flex-shrink: 0; width: 16px; text-align: left; font-size: 28px; line-height: 26px; margin-top: -2px; }
+.tiptap ol > li::before { counter-increment: ol-item; content: counter(ol-item) "."; color: var(--color-text-muted); flex-shrink: 0; width: 16px; text-align: left; line-height: 26px; }
 .tiptap li p { margin-bottom: 0; flex: 1; min-width: 0; }
 
 /* Blockquote — thinner bar, black text, stronger vertical spacing */
@@ -274,6 +276,122 @@ html, body, #root {
 }
 .floating-shortcut {
   color: var(--floating-shortcut);
+}
+
+/* Code — inline */
+.tiptap code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--color-selection-border);
+}
+/* Code — block (un-style the inline code inside the pre) */
+.tiptap pre {
+  position: relative;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9em;
+  padding: 12px 14px;
+  padding-top: 36px;
+  border-radius: 6px;
+  background: var(--color-selection-border);
+  white-space: pre;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.tiptap pre code {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+/* Code block header (language picker + copy button) */
+.code-block-header {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  left: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  user-select: none;
+}
+.code-block-lang {
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  appearance: none;
+  outline: none;
+  text-transform: lowercase;
+}
+.code-block-lang:hover {
+  background: var(--floating-btn-hover-bg);
+  color: var(--color-text-primary);
+}
+.code-block-lang:focus-visible {
+  border-color: var(--floating-border);
+}
+.code-block-copy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+  opacity: 0;
+}
+.tiptap pre:hover .code-block-copy {
+  opacity: 1;
+}
+.code-block-copy:hover {
+  background: var(--floating-btn-hover-bg);
+  color: var(--color-text-primary);
+}
+
+/* highlight.js token colors — works in both light and dark via
+   color tokens that flip with @media (prefers-color-scheme: light). */
+.hljs-comment, .hljs-quote { color: var(--color-text-muted); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #c586c0; }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string { color: #ce9178; }
+.hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo { color: #b5cea8; }
+.hljs-title, .hljs-section, .hljs-built_in, .hljs-name, .hljs-symbol, .hljs-bullet, .hljs-meta { color: #dcdcaa; }
+.hljs-tag, .hljs-formula, .hljs-selector-id { color: #569cd6; }
+.hljs-attr, .hljs-params, .hljs-property { color: #9cdcfe; }
+.hljs-deletion { color: #f48771; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 600; }
+@media (prefers-color-scheme: light) {
+  .hljs-comment, .hljs-quote { color: #6a737d; }
+  .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag { color: #af00db; }
+  .hljs-string, .hljs-regexp, .hljs-addition, .hljs-attribute, .hljs-meta-string { color: #a31515; }
+  .hljs-number, .hljs-variable, .hljs-template-variable, .hljs-type, .hljs-selector-class, .hljs-selector-attr, .hljs-selector-pseudo { color: #098658; }
+  .hljs-title, .hljs-section, .hljs-built_in, .hljs-name, .hljs-symbol, .hljs-bullet, .hljs-meta { color: #795e26; }
+  .hljs-tag, .hljs-formula, .hljs-selector-id { color: #0000ff; }
+  .hljs-attr, .hljs-params, .hljs-property { color: #001080; }
+  .hljs-deletion { color: #b31d28; }
+}
+
+/* Horizontal rule */
+.tiptap hr {
+  border: none;
+  border-top: 1px solid var(--color-selection-border);
+  margin: 28px 0;
+}
+.tiptap hr.ProseMirror-selectednode {
+  border-top-color: var(--color-text-muted);
 }
 
 /* Images in editor */

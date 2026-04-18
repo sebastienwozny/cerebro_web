@@ -1,16 +1,19 @@
 import { forwardRef } from "react";
-import { Type, Heading1, Heading2, Heading3, List, ListChecks, Quote, ImageIcon } from "lucide-react";
+import { Type, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code, Minus, ImageIcon } from "lucide-react";
 import { SLASH_COMMANDS } from "../lib/slashCommands";
 
 const META: Record<string, { icon: typeof Type; shortcut: string }> = {
-  text:       { icon: Type,       shortcut: "" },
-  heading1:   { icon: Heading1,   shortcut: "#" },
-  heading2:   { icon: Heading2,   shortcut: "##" },
-  heading3:   { icon: Heading3,   shortcut: "###" },
-  bulletList: { icon: List,        shortcut: "-" },
-  todo:       { icon: ListChecks,  shortcut: "[]" },
-  quote:      { icon: Quote,       shortcut: ">" },
-  image:      { icon: ImageIcon,   shortcut: "/image" },
+  text:        { icon: Type,        shortcut: "" },
+  heading1:    { icon: Heading1,    shortcut: "#" },
+  heading2:    { icon: Heading2,    shortcut: "##" },
+  heading3:    { icon: Heading3,    shortcut: "###" },
+  bulletList:  { icon: List,        shortcut: "-" },
+  orderedList: { icon: ListOrdered, shortcut: "1." },
+  todo:        { icon: ListChecks,  shortcut: "[]" },
+  quote:       { icon: Quote,       shortcut: ">" },
+  codeBlock:   { icon: Code,        shortcut: "```" },
+  hr:          { icon: Minus,       shortcut: "---" },
+  image:       { icon: ImageIcon,   shortcut: "/image" },
 };
 
 interface Props {
