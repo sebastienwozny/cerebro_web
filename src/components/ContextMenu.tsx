@@ -63,7 +63,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
   return createPortal(
     <div
       ref={menuRef}
-      className="fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl border border-white/8 z-10003 min-w-[200px] bg-[#1a1c1e] shadow-[0_20px_25px_-5px_rgba(0,0,0,0.3),0_8px_10px_-6px_rgba(0,0,0,0.3),0_40px_80px_-20px_rgba(0,0,0,0.25)]"
+      className="floating-menu-dropdown fixed flex flex-col py-1.5 backdrop-blur-xl rounded-xl z-10003 min-w-[200px]"
       style={{ left: x, top: y }}
     >
       {visibleItems.map((item, i) => {
@@ -71,9 +71,9 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
         return (
           <button
             key={i}
-            className={`flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 bg-transparent
+            className={`floating-item flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none transition-colors duration-100 bg-transparent
               ${item.disabled ? "opacity-40 pointer-events-none" : ""}
-              ${item.danger ? "text-red-400 hover:bg-red-500/15" : "text-neutral-300 hover:bg-white/8 hover:text-white"}`}
+              ${item.danger ? "text-red-400 hover:bg-red-500/15" : ""}`}
             onMouseDown={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -86,7 +86,7 @@ export default function ContextMenu({ x, y, items, onClose }: Props) {
             <Icon className="w-4 h-4 shrink-0" strokeWidth={2} />
             <span className="text-[13px] flex-1 text-left">{item.label}</span>
             {item.shortcut && (
-              <span className="text-[11px] text-white/40 ml-4 font-semibold tracking-wide">
+              <span className="floating-shortcut text-[11px] ml-4 font-semibold tracking-wide">
                 {item.shortcut}
               </span>
             )}
