@@ -463,6 +463,7 @@ html, body, #root {
   margin-bottom: 12px;
   padding: 4px 8px;
   border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 9px;
   font-weight: 600;
   text-transform: uppercase;
