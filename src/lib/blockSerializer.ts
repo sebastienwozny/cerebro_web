@@ -60,7 +60,13 @@ function codeBlockAttrs(b: NoteBlock): { cls: string; wrap: string } {
   };
 }
 
-export function blocksToHtml(blocks: NoteBlock[]): string {
+/**
+ * Serialize blocks to HTML for TipTap's initial content.
+ * `videoUrls` maps block id → object URL for video blobs (created by the
+ * caller from `URL.createObjectURL`). Without it, video blocks are skipped
+ * (preview-only contexts use `blocksToPreviewHtml`).
+ */
+export function blocksToHtml(blocks: NoteBlock[], videoUrls?: Map<string, string>): string {
   const parts: string[] = [];
   let i = 0;
   while (i < blocks.length) {
@@ -70,6 +76,15 @@ export function blocksToHtml(blocks: NoteBlock[]): string {
       if (b.imageDataUrl) {
         const aspect = b.imageAspect ? ` data-aspect="${b.imageAspect}"` : "";
         parts.push(`<img src="${b.imageDataUrl}"${aspect} />`);
+      }
+      i++;
+    } else if (b.type === "video") {
+      const url = videoUrls?.get(b.id);
+      if (url) {
+        const aspect = b.videoAspect ? ` data-aspect="${b.videoAspect}"` : "";
+        const poster = b.videoPosterDataUrl ? ` poster="${b.videoPosterDataUrl}"` : "";
+        const mime = b.videoMimeType ? ` data-mime="${escapeHtml(b.videoMimeType)}"` : "";
+        parts.push(`<video data-block-id="${b.id}" src="${url}"${poster}${aspect}${mime} controls></video>`);
       }
       i++;
     } else if (b.type === "bulletList" || b.type === "orderedList") {
@@ -121,6 +136,14 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
     if (b.type === "image") {
       if (b.imageDataUrl) {
         parts.push(`<img src="${b.imageDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
+      }
+      i++;
+    } else if (b.type === "video") {
+      // Previews render video blocks as a static poster image — the card
+      // header (when the video is first) is handled by a dedicated React
+      // component in NotePreview for hover-to-play.
+      if (b.videoPosterDataUrl) {
+        parts.push(`<img src="${b.videoPosterDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
       }
       i++;
     } else if (b.type === "bulletList" || b.type === "orderedList") {
@@ -200,7 +223,17 @@ function inlineHtml(node: Record<string, unknown>): string {
   }).join("");
 }
 
-export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] {
+/**
+ * Convert the current editor document back to blocks.
+ *
+ * `videoBlobs` (block id → Blob) is required to preserve video binary data:
+ * TipTap stores only the object URL + blockId on the video node, so the
+ * original Blob is reattached here by id. Unknown ids are dropped.
+ */
+export function htmlToBlocks(
+  editor: ReturnType<typeof useEditor>,
+  videoBlobs?: Map<string, Blob>,
+): NoteBlock[] {
   if (!editor) return [];
   const json = editor.getJSON();
   const blocks: NoteBlock[] = [];
@@ -278,6 +311,22 @@ export function htmlToBlocks(editor: ReturnType<typeof useEditor>): NoteBlock[] 
         content: "",
         imageDataUrl: (attrs?.src as string) ?? "",
         imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
+      });
+    } else if (node.type === "video") {
+      const attrs = node.attrs as Record<string, unknown> | undefined;
+      const blockId = (attrs?.blockId as string | undefined) ?? "";
+      const blob = blockId ? videoBlobs?.get(blockId) : undefined;
+      // Drop the block if we've lost track of the underlying Blob — without
+      // it we can't re-render or persist.
+      if (!blob) continue;
+      blocks.push({
+        id: blockId,
+        type: "video",
+        content: "",
+        videoBlob: blob,
+        videoPosterDataUrl: (attrs?.poster as string | undefined) ?? "",
+        videoAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
+        videoMimeType: (attrs?.mimeType as string | undefined) ?? blob.type,
       });
     } else {
       blocks.push({

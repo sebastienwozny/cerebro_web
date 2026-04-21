@@ -588,21 +588,34 @@ html, body, #root {
   box-shadow: 0 0 0 3px var(--color-selection-border);
 }
 
-/* Image card — fade in text below image on open */
-.image-card-open .tiptap > img:first-child {
+/* Media card (image/video) — fade in text below header media on open */
+.image-card-open .tiptap > img:first-child,
+.image-card-open .tiptap > .video-block-wrap:first-child {
   margin-top: 0;
 }
-.image-card-open .tiptap > *:not(img) {
+.image-card-open .tiptap > *:not(img):not(.video-block-wrap) {
   animation: fadeIn 0.3s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
-/* Image card — fade out text during close, hide tiptap image (hero handles it) */
-.image-card-closing .tiptap img {
+/* Media card — fade out text during close, hide tiptap header (hero handles it) */
+.image-card-closing .tiptap img,
+.image-card-closing .tiptap .video-block-wrap {
   visibility: hidden;
 }
-.image-card-closing .tiptap > *:not(img) {
+.image-card-closing .tiptap > *:not(img):not(.video-block-wrap) {
   opacity: var(--text-fade, 1);
 }
+
+/* Video block wrapper inside the editor */
+.tiptap .video-block-wrap {
+  width: 100%;
+  margin: 12px 0;
+}
+.tiptap .video-block-wrap video {
+  display: block;
+  border-radius: 6px;
+}
+
 
 /* ── Block handles (drag + plus) — shared styling ── */
 .drag-handle {

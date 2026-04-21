@@ -6,7 +6,8 @@ import { useCardHover } from "../hooks/useCardHover";
 import { useCardResize } from "../hooks/useCardResize";
 import { useImageBrightness } from "../hooks/useImageBrightness";
 import { CARD_CONTENT_W } from "../constants";
-import { getCardSize, getHeaderImage } from "../lib/cardDimensions";
+import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
+import PersistentVideoPlayer from "./PersistentVideoPlayer";
 
 interface Props {
   note: Note;
@@ -38,6 +39,13 @@ interface Props {
   onBringToFront: (noteId: string) => void;
   onResize?: (noteId: string, newScale: number, newPosX: number, newPosY: number) => void;
   onResizeEnd?: (noteId: string, oldScale: number, oldPosX: number, oldPosY: number) => void;
+  /** When true, render only the persistent video portal — no card visual.
+   *  Used by the canvas-listed card while a sister open card handles the visual,
+   *  so the <video> element never remounts on tap. */
+  isShadowInstance?: boolean;
+  /** When true, skip rendering the persistent video portal. Used by the open card
+   *  while its canvas-listed counterpart owns the shared <video>. */
+  suppressVideoPortal?: boolean;
   children?: React.ReactNode;
 }
 
@@ -94,6 +102,7 @@ function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
   isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
+  isShadowInstance, suppressVideoPortal,
   children,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -105,8 +114,13 @@ function NoteCard({
     requestAnimationFrame(() => setShadowReady(true));
   }, []);
 
-  const headerImage = getHeaderImage(note);
-  const isImageCard = headerImage !== null;
+  const headerMedia = getHeaderMedia(note);
+  const isMediaCard = headerMedia !== null;
+  // Both image and video cards use the same layout treatment.
+  const isImageCard = isMediaCard;
+  const headerDataUrl = headerMedia
+    ? headerMedia.type === "image" ? headerMedia.dataUrl : headerMedia.posterDataUrl
+    : null;
 
   const { w: cardW, h: cardH } = getCardSize(note);
   const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
@@ -152,22 +166,54 @@ function NoteCard({
     onResizeRelease: onHoverResizeEnd,
   });
 
-  const isLightImage = useImageBrightness(headerImage?.dataUrl);
+  const isLightImage = useImageBrightness(headerDataUrl ?? undefined);
 
-  // Hero animation for image card close: capture image screen rect before overlay unmounts
+  // Hero animation for media card close: capture header media screen rect
+  // before overlay unmounts. Look for the first <img>/<video> in the editor.
   const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   useLayoutEffect(() => {
-    if (isImageCard && isClosing && !closingImgRect.current) {
-      const img = document.querySelector("[data-editor-overlay] .tiptap img") as HTMLElement | null;
-      if (img) {
-        const r = img.getBoundingClientRect();
+    if (isMediaCard && isClosing && !closingImgRect.current) {
+      const media = document.querySelector("[data-editor-overlay] .tiptap img, [data-editor-overlay] .tiptap .video-block-wrap") as HTMLElement | null;
+      if (media) {
+        const r = media.getBoundingClientRect();
         closingImgRect.current = { x: r.left, y: r.top, w: r.width, h: r.height };
       }
     }
     if (!isClosing) closingImgRect.current = null;
-  }, [isImageCard, isClosing]);
+  }, [isMediaCard, isClosing]);
 
   const t = openProgress;
+
+  // Pointer-over tracking independent of drag/hover interaction logic, so the
+  // hover video keeps playing during a drag as long as the cursor is on the
+  // card (per product spec).
+  const [cursorInside, setCursorInside] = useState(false);
+
+  // During open/close the main card div isn't rendered (shadow mode), so
+  // pointerEnter/Leave never fire — cursorInside would stay stuck at whatever
+  // it was before the tap, causing the video to auto-resume right after close
+  // even if the user's pointer is no longer on the card. Reset whenever
+  // hover is suppressed so the card requires a fresh pointer-enter.
+  useEffect(() => {
+    if (hoverSuppressed || isShadowInstance) {
+      console.log("[NoteCard] reset cursorInside (hoverSuppressed or shadow)", { noteId: note.id, hoverSuppressed, isShadowInstance });
+      setCursorInside(false);
+    }
+  }, [hoverSuppressed, isShadowInstance, note.id]);
+
+  // Track editor scroll position so the portal-rendered PersistentVideoPlayer
+  // scrolls with the note body instead of acting like a sticky header.
+  // Shadow instances don't render the editor overlay themselves, so they fall
+  // back to a DOM query to subscribe to the open card's scroll container.
+  const [editorScrollY, setEditorScrollY] = useState(0);
+  useEffect(() => {
+    const el = scrollRef.current ?? (document.querySelector("[data-editor-overlay]") as HTMLDivElement | null);
+    if (!el) { setEditorScrollY(0); return; }
+    const onScroll = () => setEditorScrollY(el.scrollTop);
+    onScroll();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [openProgress >= 1, isShadowInstance]);
 
   const canvasLeft = note.positionX - cardW / 2 + groupDragDelta.dx;
   const canvasTop = note.positionY - cardH / 2 + groupDragDelta.dy;
@@ -203,6 +249,7 @@ function NoteCard({
 
   return (
     <>
+      {!isShadowInstance && (
       <div
         ref={cardRef}
         className="absolute select-none pointer-events-auto"
@@ -214,19 +261,32 @@ function NoteCard({
           zIndex: openProgress > 0 ? "var(--z-card-open)" : note.zOrder,
           transform: isDeleting
             ? "scale(0)"
-            : isDragging || isFollowing
-                ? `rotate(${rotation}deg)`
-                : t > 0
+            : isDragging
+                // Video cards drag without tilt or scale: rotation pushes
+                // Chrome's video compositor off its color-managed path (reads
+                // lighter), and any card-level scale not mirrored by the PVP
+                // portal would expose the card background behind the video.
+                ? headerMedia?.type === "video"
                   ? "none"
-                  : isHovered && !isSelected && !suppressScale && !isResizing
-                    ? "scale(1.02)"
-                    : "none",
+                  : `rotate(${rotation}deg) scale(1.02)`
+                : isFollowing
+                  ? headerMedia?.type === "video"
+                    ? "none"
+                    : `rotate(${rotation}deg)`
+                  : t > 0
+                    ? "none"
+                    : isHovered && !isSelected && !suppressScale && !isResizing
+                      ? "scale(1.02)"
+                      : "none",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
             ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
             : isDragging || isFollowing
-              ? "transform 0.15s ease-out, opacity 0.3s ease-out"
+              // Transform updates every frame during drag/follow (rotation spring,
+              // drag delta); a transition would introduce lag that decouples the
+              // card from the portal-rendered video player.
+              ? "opacity 0.3s ease-out"
               : t > 0
                 ? "none"
                 : isAnimating
@@ -235,6 +295,8 @@ function NoteCard({
         }}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
+        onPointerEnter={() => { if (!isDragging && !isResizing) { console.log("[NoteCard] pointerEnter -> cursorInside=true", { noteId: note.id, isShadowInstance }); setCursorInside(true); } }}
+        onPointerLeave={() => { if (!isDragging && !isResizing) { console.log("[NoteCard] pointerLeave -> cursorInside=false", { noteId: note.id, isShadowInstance }); setCursorInside(false); } }}
       >
         {/* Clipped card content */}
         <div
@@ -248,7 +310,9 @@ function NoteCard({
               ? "var(--shadow-card-invisible)"
               : isSelected && openProgress < 0.1
                 ? "var(--shadow-card-selected)"
-                : isHovered
+                // Keep the hover shadow through drag/follow: dropping to rest
+                // mid-drag reads as a brightness change around the card.
+                : isHovered || isDragging || isFollowing
                   ? "var(--shadow-card-hover)"
                   : "var(--shadow-card-rest)",
             transition: "box-shadow 0.2s ease-out",
@@ -275,10 +339,29 @@ function NoteCard({
             />
           )}
 
-          {/* Image card thumbnail — visible only at rest (t=0), hidden during open/close transitions */}
-          {isImageCard && headerImage && t === 0 && (
+          {/* Media card thumbnail — visible only at rest (t=0), hidden during open/close transitions */}
+          {isMediaCard && headerMedia?.type === "image" && t === 0 && (
             <img
-              src={headerImage.dataUrl}
+              src={headerMedia.dataUrl}
+              alt=""
+              className="absolute pointer-events-none"
+              style={{
+                top: 0,
+                left: 0,
+                width: cardW,
+                height: cardH,
+                objectFit: "cover",
+              }}
+              draggable={false}
+            />
+          )}
+          {/* Card's own poster — shown only at rest (no PVP mounted). When
+              the PVP takes over, rendering both would put two posters on
+              different compositor layers that can subpixel-misalign under
+              rotation, which reads as a brightness flicker on the video. */}
+          {isMediaCard && headerMedia?.type === "video" && t === 0 && !cursorInside && !isResizing && (
+            <img
+              src={headerMedia.posterDataUrl}
               alt=""
               className="absolute pointer-events-none"
               style={{
@@ -347,9 +430,10 @@ function NoteCard({
           );
         })()}
       </div>
+      )}
 
       {/* Back button */}
-      {openProgress > 0 && (
+      {!isShadowInstance && openProgress > 0 && (
         <button
           className="fixed top-6 w-10 h-10 rounded-full border-none flex items-center justify-center text-xl cursor-pointer backdrop-blur-sm z-(--z-editor-controls) bg-back-button-bg text-text-muted"
           style={{
@@ -368,7 +452,7 @@ function NoteCard({
 
 
       {/* Editor content (open mode) */}
-      {editing && (
+      {!isShadowInstance && editing && (
         <div
           ref={scrollRef}
           data-editor-overlay
@@ -386,15 +470,14 @@ function NoteCard({
         </div>
       )}
 
-      {/* Hero image for image card open/close transition — portal so it's not clipped */}
-      {isImageCard && t > 0 && !editing && headerImage && (() => {
-        // Editor image target rect (centered, below 120px header)
+      {/* Hero image for image-card open/close transition — portal so it's not
+          clipped. Video cards use PersistentVideoPlayer below instead. */}
+      {!isShadowInstance && isMediaCard && headerMedia?.type === "image" && t > 0 && !editing && headerDataUrl && (() => {
         const editorImgW = CARD_CONTENT_W;
-        const editorImgH = CARD_CONTENT_W * headerImage.aspect;
+        const editorImgH = CARD_CONTENT_W * headerMedia.aspect;
         const editorImgX = (windowW - editorImgW) / 2;
         const editorImgY = 120;
 
-        // Use captured rect for close (more accurate), computed rect for open
         const targetX = isClosing && closingImgRect.current ? closingImgRect.current.x : editorImgX;
         const targetY = isClosing && closingImgRect.current ? closingImgRect.current.y : editorImgY;
         const targetW = isClosing && closingImgRect.current ? closingImgRect.current.w : editorImgW;
@@ -402,7 +485,7 @@ function NoteCard({
 
         return createPortal(
           <img
-            src={headerImage.dataUrl}
+            src={headerDataUrl}
             alt=""
             style={{
               position: "fixed",
@@ -413,13 +496,72 @@ function NoteCard({
               objectFit: "cover",
               zIndex: "var(--z-editor-controls)",
               pointerEvents: "none",
-              // Target 6px to match `.tiptap img` border-radius so the hero
-              // lands on the editor image without a visible radius snap.
               borderRadius: lerp(cardRadius * scale, 6, t),
             }}
             draggable={false}
           />,
           document.body,
+        );
+      })()}
+
+      {/* Persistent video player — one <video> element that spans hover →
+          open → close. No swap, continuous playback. */}
+      {headerMedia?.type === "video" && !suppressVideoPortal && (() => {
+        const hoverActive = cursorInside && !hoverSuppressed && !isOpen;
+        // Always mount the PVP for video cards. This keeps the native <video>
+        // element rendering at rest (paused at t=0) instead of falling back
+        // to the JPEG poster, which goes through a different color path and
+        // reads lighter than the native video rendering.
+
+        const editorImgW = CARD_CONTENT_W;
+        const editorImgH = CARD_CONTENT_W * headerMedia.aspect;
+        const editorImgX = (windowW - editorImgW) / 2;
+        const editorImgY = 120;
+
+        const openRect = {
+          left: editorImgX,
+          top: editorImgY,
+          width: editorImgW,
+          height: editorImgH,
+          borderRadius: 6,
+        };
+        const canvasRect = {
+          left: cardScreenLeft + groupDragDelta.dx * scale,
+          top: cardScreenTop + groupDragDelta.dy * scale,
+          width: cardW * scale,
+          height: cardH * scale,
+          borderRadius: cardRadius * scale,
+        };
+
+        // Play only when actively engaged (hover, opening/open, resizing).
+        // At rest, the video stays paused at currentTime=0 so the user sees
+        // the native video frame (not the JPEG poster). Close anim freezes.
+        const playing = (hoverActive || t > 0 || isResizing) && !isClosing;
+        const unlocked = editing;
+        const pointerEvents = editing ? "auto" : "none";
+
+        // rotationDeg is forced to 0 for video cards: any ancestor rotation
+        // pushes Chrome's video compositor onto its non-color-managed path,
+        // which renders noticeably lighter than the rest state. Video cards
+        // translate during drag but don't tilt.
+        return (
+          <PersistentVideoPlayer
+            blockId={headerMedia.blockId}
+            videoBlob={headerMedia.videoBlob}
+            posterDataUrl={headerMedia.posterDataUrl}
+            canvasRect={canvasRect}
+            openRect={openRect}
+            openProgress={t}
+            editorScrollY={editorScrollY}
+            playing={playing}
+            unlocked={unlocked}
+            zIndex="var(--z-editor-controls)"
+            pointerEvents={pointerEvents}
+            rotationDeg={0}
+            isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
+            transformTransition={t === 0 && !isDragging && !isFollowing && !isResizing}
+            showPoster={false}
+          />
         );
       })()}
     </>

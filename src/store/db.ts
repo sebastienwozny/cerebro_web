@@ -13,7 +13,8 @@ export type BlockType =
   | "quote"
   | "codeBlock"
   | "hr"
-  | "image";
+  | "image"
+  | "video";
 
 export interface NoteBlock {
   id: string;
@@ -24,6 +25,12 @@ export interface NoteBlock {
   imageAspect?: number;  // height / width  (image blocks)
   codeLanguage?: string; // hljs language id (codeBlock blocks)
   codeWrap?: boolean;    // wrap long lines instead of horizontal scroll
+  // Video blocks store the media as a Blob (binary) in IndexedDB to avoid
+  // the 33% base64 overhead and keep large files out of TipTap's doc state.
+  videoBlob?: Blob;
+  videoPosterDataUrl?: string; // base64 poster image (thumbnail frame)
+  videoAspect?: number;        // height / width
+  videoMimeType?: string;      // e.g. "video/mp4"
 }
 
 // ── Note model ──

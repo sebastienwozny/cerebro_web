@@ -12,6 +12,7 @@ import {
   Code,
   Minus,
   ImageIcon,
+  Film,
 } from "lucide-react";
 import type { BlockType } from "../store/db";
 
@@ -22,7 +23,7 @@ export interface BlockDef {
   slashShortcut: string;
   /**
    * Convert the currently-focused empty block into this block type.
-   * `image` has no apply (the caller opens a file picker).
+   * `image`/`video` have no apply (the caller opens a file picker).
    */
   apply: ((editor: Editor) => void) | null;
 }
@@ -105,6 +106,13 @@ export const BLOCK_DEFS: BlockDef[] = [
     label: "Image",
     icon: ImageIcon,
     slashShortcut: "/image",
+    apply: null,
+  },
+  {
+    type: "video",
+    label: "Video",
+    icon: Film,
+    slashShortcut: "/video",
     apply: null,
   },
 ];

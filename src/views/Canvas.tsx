@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNotes } from "../store/useNotes";
-import { db, type Note } from "../store/db";
+import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
 import { useOpenClose } from "../hooks/useOpenClose";
 import { useSpacePan } from "../hooks/useSpacePan";
@@ -8,11 +8,11 @@ import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useWindowSize } from "../hooks/useWindowSize";
-import { useCanvasImageImport } from "../hooks/useCanvasImageImport";
+import { useCanvasMediaImport } from "../hooks/useCanvasMediaImport";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import gsap from "gsap";
 import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
-import { getCardSize } from "../lib/cardDimensions";
+import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
 import NotePreview from "../components/NotePreview";
@@ -26,6 +26,35 @@ import {
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
 const NOOP_ID = () => {};
+
+/** TipTap init is synchronous and heavy; for video cards we defer mounting the
+ *  editor until the open animation has finished, so the opening frames don't
+ *  stutter. Once mounted, it stays mounted through close (ref stickiness) — the
+ *  open card itself unmounts at openProgress=0, which resets this state. */
+function OpenCardContent({
+  note, openProgress, updateNote,
+}: {
+  note: Note;
+  openProgress: number;
+  updateNote: (id: string, updates: Partial<Note>) => Promise<void>;
+}) {
+  const isVideoNote = getHeaderMedia(note)?.type === "video";
+  const [editorReady, setEditorReady] = useState(!isVideoNote);
+  useEffect(() => {
+    if (!editorReady && openProgress >= 1) setEditorReady(true);
+  }, [openProgress, editorReady]);
+  if (!editorReady) return null;
+  return (
+    <NoteEditor
+      blocks={note.blocks}
+      onUpdate={(blocks) => {
+        const title = blocks.find(b => b.type !== "image" && b.type !== "video")?.content ?? "";
+        updateNote(note.id, { blocks, title });
+      }}
+      editable={openProgress >= 1}
+    />
+  );
+}
 
 export default function Canvas() {
   const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
@@ -70,6 +99,12 @@ export default function Canvas() {
   const [groupDragRotation, setGroupDragRotation] = useState(0);
   const groupDragDeltaRef = useRef({ dx: 0, dy: 0 });
   const groupDragRafRef = useRef(0);
+  // Resize override — visual-only scale/position while the user is resizing a
+  // card, so per-frame pointer moves don't hit Dexie (which would re-read every
+  // note, including large video Blobs, and stall the main thread).
+  const [resizeOverride, setResizeOverride] = useState<{ noteId: string; cardScale: number; positionX: number; positionY: number } | null>(null);
+  const resizeOverrideRef = useRef<typeof resizeOverride>(null);
+  const resizeRafRef = useRef(0);
   // Stores start positions for ALL cards in the group (leader + followers)
   const groupDragStartRef = useRef<Map<string, { x: number; y: number }>>(new Map());
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -296,13 +331,14 @@ export default function Canvas() {
     recordAction: undoStack.record.bind(undoStack),
   });
 
-  // Create a new note (with optional image) at canvas coords, record for undo.
+  // Create a new note (with optional media header block) at canvas coords,
+  // record for undo.
   const createNoteAt = useCallback(
-    async (canvasX: number, canvasY: number, dataUrl?: string, aspect?: number) => {
+    async (canvasX: number, canvasY: number, initialMediaBlock?: NoteBlock) => {
       const noteId = crypto.randomUUID();
       triggerPop([noteId]);
       undoStack.record({ type: "create", noteIds: [noteId] });
-      await addNote(canvasX, canvasY, noteId, dataUrl, aspect);
+      await addNote(canvasX, canvasY, noteId, initialMediaBlock);
     },
     [addNote, triggerPop]
   );
@@ -328,8 +364,11 @@ export default function Canvas() {
     [canvasLocked, getTransform, windowSize, createNoteAt]
   );
 
-  const { imageInputRef, isDragOver, handleDragOver, handleDragLeave, handleDrop, handleImageInput } =
-    useCanvasImageImport({ canvasLocked, windowSize, getTransform, createNote: createNoteAt });
+  const {
+    imageInputRef, videoInputRef, isDragOver,
+    handleDragOver, handleDragLeave, handleDrop,
+    handleImageInput, handleVideoInput,
+  } = useCanvasMediaImport({ canvasLocked, windowSize, getTransform, createNote: createNoteAt });
 
   const handleCardTap = useCallback(
     (noteId: string) => { clearSelection(); openNote(noteId); },
@@ -347,18 +386,21 @@ export default function Canvas() {
       if (!leadNote) return;
       leadStartRef.current = { x: leadNote.positionX, y: leadNote.positionY };
 
+      const starts = new Map<string, { x: number; y: number }>();
       if (selectedIds.has(noteId) && selectedIds.size > 1) {
         // Group drag — store ALL selected cards (leader included)
-        const starts = new Map<string, { x: number; y: number }>();
         for (const note of notes) {
           if (selectedIds.has(note.id)) {
             starts.set(note.id, { x: note.positionX, y: note.positionY });
           }
         }
-        groupDragStartRef.current = starts;
       } else {
-        groupDragStartRef.current = new Map();
+        // Solo drag — still use the delta mechanism so the DB isn't touched
+        // until drag end. Writing to Dexie per-frame would re-read every note
+        // (including large video Blobs) and stall the main thread.
+        starts.set(noteId, { x: leadNote.positionX, y: leadNote.positionY });
       }
+      groupDragStartRef.current = starts;
       groupDragDeltaRef.current = { dx: 0, dy: 0 };
       setGroupDragDelta({ dx: 0, dy: 0 });
     },
@@ -366,24 +408,20 @@ export default function Canvas() {
   );
 
   const handleDragMove = useCallback(
-    (noteId: string, newX: number, newY: number) => {
-      if (groupDragStartRef.current.size > 0 && leadStartRef.current) {
-        // Group drag — no DB updates, all movement is visual via delta
-        const dx = newX - leadStartRef.current.x;
-        const dy = newY - leadStartRef.current.y;
-        groupDragDeltaRef.current = { dx, dy };
-        if (!groupDragRafRef.current) {
-          groupDragRafRef.current = requestAnimationFrame(() => {
-            groupDragRafRef.current = 0;
-            setGroupDragDelta({ ...groupDragDeltaRef.current });
-          });
-        }
-      } else {
-        // Solo drag — update DB directly
-        updateNote(noteId, { positionX: newX, positionY: newY });
+    (_noteId: string, newX: number, newY: number) => {
+      if (!leadStartRef.current) return;
+      // Visual-only delta — DB is written once on drag end.
+      const dx = newX - leadStartRef.current.x;
+      const dy = newY - leadStartRef.current.y;
+      groupDragDeltaRef.current = { dx, dy };
+      if (!groupDragRafRef.current) {
+        groupDragRafRef.current = requestAnimationFrame(() => {
+          groupDragRafRef.current = 0;
+          setGroupDragDelta({ ...groupDragDeltaRef.current });
+        });
       }
     },
-    [updateNote]
+    []
   );
 
   const handleDragEnd = useCallback(
@@ -412,34 +450,13 @@ export default function Canvas() {
             moves: [...starts].map(([id, start]) => ({ noteId: id, oldX: start.x, oldY: start.y })),
           });
         }
-        // Commit final positions to DB
+        // Commit final positions to DB (once, on drag end)
         const promises: Promise<void>[] = [];
         for (const [id, start] of starts) {
           promises.push(updateNote(id, { positionX: start.x + delta.dx, positionY: start.y + delta.dy }));
         }
         await Promise.all(promises);
         await new Promise(r => setTimeout(r, 50));
-      } else if (leadStartRef.current) {
-        // Solo drag
-        const lead = leadStartRef.current;
-        const note = notesRef.current.find(n => n.id === noteId);
-        const moved = note && (Math.abs(note.positionX - lead.x) > 0.1 || Math.abs(note.positionY - lead.y) > 0.1);
-        if (dupeIds.length > 0 && moved) {
-          undoStack.record({
-            type: "batch",
-            actions: [
-              { type: "create", noteIds: dupeIds },
-              { type: "move", moves: [{ noteId, oldX: lead.x, oldY: lead.y }] },
-            ],
-          });
-        } else if (dupeIds.length > 0) {
-          undoStack.record({ type: "create", noteIds: dupeIds });
-        } else if (moved) {
-          undoStack.record({
-            type: "move",
-            moves: [{ noteId, oldX: lead.x, oldY: lead.y }],
-          });
-        }
       }
       // Clear refs
       groupDragStartRef.current = new Map();
@@ -491,23 +508,45 @@ export default function Canvas() {
   );
 
   const handleDragRotation = useCallback((rotation: number) => {
-    if (groupDragStartRef.current.size > 0) {
+    // Only propagate rotation to followers in an actual group drag.
+    // Solo drag has no followers — the leader uses its own internal dragRotation.
+    if (groupDragStartRef.current.size > 1) {
       setGroupDragRotation(rotation);
     }
   }, []);
 
   const handleResize = useCallback(
     (noteId: string, newScale: number, newPosX: number, newPosY: number) => {
-      updateNote(noteId, { cardScale: newScale, positionX: newPosX, positionY: newPosY });
+      resizeOverrideRef.current = { noteId, cardScale: newScale, positionX: newPosX, positionY: newPosY };
+      if (!resizeRafRef.current) {
+        resizeRafRef.current = requestAnimationFrame(() => {
+          resizeRafRef.current = 0;
+          setResizeOverride(resizeOverrideRef.current);
+        });
+      }
     },
-    [updateNote]
+    []
   );
 
   const handleResizeEnd = useCallback(
-    (noteId: string, oldScale: number, oldPosX: number, oldPosY: number) => {
+    async (noteId: string, oldScale: number, oldPosX: number, oldPosY: number) => {
       undoStack.record({ type: "resize", noteId, oldScale, oldPosX, oldPosY });
+      const override = resizeOverrideRef.current;
+      if (resizeRafRef.current) {
+        cancelAnimationFrame(resizeRafRef.current);
+        resizeRafRef.current = 0;
+      }
+      if (override && override.noteId === noteId) {
+        await updateNote(noteId, { cardScale: override.cardScale, positionX: override.positionX, positionY: override.positionY });
+        // Wait two frames so Dexie's liveQuery has propagated and React has
+        // re-rendered with the new note values before we drop the visual
+        // override — otherwise the card snaps to its pre-resize size.
+        await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+      resizeOverrideRef.current = null;
+      setResizeOverride(null);
     },
-    []
+    [updateNote]
   );
 
   // Context menu: right-click on card
@@ -634,14 +673,25 @@ export default function Canvas() {
         }}
       >
         {notes.map((note) => {
-          if (note.id === openNoteId && openProgress > 0) return null;
+          const isOpening = note.id === openNoteId && openProgress > 0;
+          // For video cards we keep the canvas-list instance mounted during
+          // open as a "shadow" — it owns the persistent <video> portal so the
+          // element never remounts on tap/close. Non-video cards drop out.
+          // NOTE: video-opening starts the instant openNoteId is set (openProgress
+          // may still be 0 for one render); otherwise the PVP would unmount in
+          // that gap and remount as a new <video> element.
+          const isVideoOpening = note.id === openNoteId && getHeaderMedia(note)?.type === "video";
+          if (isOpening && !isVideoOpening) return null;
           // Card is in the group drag if it's in groupDragStartRef (leader + followers)
           const inGroupDrag = groupDragStartRef.current.has(note.id);
           // Pin to start position during group drag to avoid double-delta when Dexie propagates
           const startPos = inGroupDrag ? groupDragStartRef.current.get(note.id)! : null;
-          const noteForCard = startPos
-            ? { ...note, positionX: startPos.x, positionY: startPos.y }
-            : note;
+          const resizeOver = resizeOverride?.noteId === note.id ? resizeOverride : null;
+          const noteForCard = resizeOver
+            ? { ...note, cardScale: resizeOver.cardScale, positionX: resizeOver.positionX, positionY: resizeOver.positionY }
+            : startPos
+              ? { ...note, positionX: startPos.x, positionY: startPos.y }
+              : note;
 
           // Viewport culling — skip cards outside visible area
           const { w: cw, h: ch } = getCardSize(noteForCard);
@@ -656,7 +706,7 @@ export default function Canvas() {
             screenX - (cw / 2) * s < windowSize.w + margin &&
             screenY + (ch / 2) * s > -margin &&
             screenY - (ch / 2) * s < windowSize.h + margin;
-          if (!isVisible && !selectedIds.has(note.id) && !deletingIds.has(note.id) && !inGroupDrag && !popIds.has(note.id)) return null;
+          if (!isVisible && !selectedIds.has(note.id) && !deletingIds.has(note.id) && !inGroupDrag && !popIds.has(note.id) && !isVideoOpening) return null;
 
           return (
             <div
@@ -667,17 +717,19 @@ export default function Canvas() {
               <NoteCard
                 note={noteForCard}
                 scale={transformRef.current.scale}
-                offsetX={0}
-                offsetY={0}
-                windowW={0}
-                windowH={0}
+                offsetX={ox}
+                offsetY={oy}
+                windowW={windowSize.w}
+                windowH={windowSize.h}
                 isOpen={false}
                 isSelected={selectedIds.has(note.id)}
                 isDeleting={deletingIds.has(note.id)}
                 isPopping={popIds.has(note.id)}
                 isAnimating={animatingIds.has(note.id)}
-                openProgress={0}
-                closingScrollOffset={0}
+                openProgress={isVideoOpening ? openProgress : 0}
+                isClosing={isVideoOpening ? isClosing : false}
+                closingScrollOffset={isVideoOpening ? closingScrollOffset : 0}
+                isShadowInstance={isVideoOpening}
                 hoverSuppressed={marquee !== null || openNoteId !== null}
                 spaceHeld={spaceHeld}
                 groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
@@ -728,16 +780,10 @@ export default function Canvas() {
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
             onBringToFront={bringToFront}
+            suppressVideoPortal
           >
             <div style={{ "--open-progress": openProgress } as React.CSSProperties}>
-              <NoteEditor
-                blocks={note.blocks}
-                onUpdate={(blocks) => {
-                  const title = blocks.find(b => b.type !== "image")?.content ?? "";
-                  updateNote(note.id, { blocks, title });
-                }}
-                editable={openProgress >= 1}
-              />
+              <OpenCardContent note={note} openProgress={openProgress} updateNote={updateNote} />
             </div>
           </NoteCard>
         </div>
@@ -756,7 +802,7 @@ export default function Canvas() {
         />
       )}
 
-      {/* Add note / image buttons */}
+      {/* Add note / image / video buttons */}
       {!canvasLocked && (
         <div className="fixed bottom-6 right-6 flex gap-2 z-(--z-fab)">
           <input
@@ -766,6 +812,24 @@ export default function Canvas() {
             className="hidden"
             onChange={handleImageInput}
           />
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={handleVideoInput}
+          />
+          <button
+            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
+            title="Add video"
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={() => videoInputRef.current?.click()}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m22 8-6 4 6 4V8Z" />
+              <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
+            </svg>
+          </button>
           <button
             className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
             title="Add image"

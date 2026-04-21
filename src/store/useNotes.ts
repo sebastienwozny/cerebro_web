@@ -17,12 +17,11 @@ export function useNotes() {
     x: number,
     y: number,
     id?: string,
-    imageDataUrl?: string,
-    imageAspect?: number,
+    initialMediaBlock?: NoteBlock,
   ): Promise<Note> {
     const maxZ = getMaxZ(notes);
-    const blocks: NoteBlock[] = imageDataUrl
-      ? [{ id: uuid(), type: "image", content: "", imageDataUrl, imageAspect: imageAspect ?? 1 }, makeBlock("text")]
+    const blocks: NoteBlock[] = initialMediaBlock
+      ? [initialMediaBlock, makeBlock("text")]
       : [makeBlock("heading1")];
     const note: Note = {
       id: id ?? uuid(),

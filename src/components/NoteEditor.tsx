@@ -19,7 +19,9 @@ import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
 import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
 import { readImageFile } from "../lib/imageUtils";
-import { CodeBlockWithView, ImageWithAspect } from "../lib/editor/extensions";
+import { readVideoFile, VideoTooLargeError } from "../lib/videoUtils";
+import { getVideoUrl } from "../lib/videoUrlCache";
+import { CodeBlockWithView, ImageWithAspect, VideoBlock } from "../lib/editor/extensions";
 import FormatToolbar from "./FormatToolbar";
 import PlusMenu from "./PlusMenu";
 
@@ -30,11 +32,25 @@ interface Props {
 }
 
 export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
-  const initialHtml = useRef(blocksToHtml(blocks));
+  // Block-id → Blob map is local (used by the HTML→block serializer to reattach
+  // blobs on save). URLs come from a module-level cache so StrictMode's double
+  // effect cycle can't revoke them out from under the editor.
+  const videoBlobsRef = useRef<Map<string, Blob>>(new Map());
+  const videoUrlsRef = useRef<Map<string, string>>(new Map());
+  for (const b of blocks) {
+    if (b.type === "video" && b.videoBlob && !videoBlobsRef.current.has(b.id)) {
+      videoBlobsRef.current.set(b.id, b.videoBlob);
+      videoUrlsRef.current.set(b.id, getVideoUrl(b.id, b.videoBlob));
+    }
+  }
+
+  const initialHtml = useRef(blocksToHtml(blocks, videoUrlsRef.current));
   const [showToolbar, setShowToolbar] = useState(false);
   const [formatTooltips, setFormatTooltips] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInsertPosRef = useRef<number | null>(null);
+  const videoInsertPosRef = useRef<number | null>(null);
 
   const [hasSelection, setHasSelection] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
@@ -73,6 +89,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       TaskList,
       TaskItem.configure({ nested: false }),
       ImageWithAspect.configure({ inline: false, allowBase64: true }),
+      VideoBlock,
       Underline,
       GlobalDragHandle.configure({
         dragHandleWidth: 36,
@@ -85,7 +102,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     content: initialHtml.current,
     editable,
     onUpdate: ({ editor }) => {
-      onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>));
+      onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>, videoBlobsRef.current));
     },
     onSelectionUpdate: ({ editor }) => {
       // Don't show the style toolbar for NodeSelection — that's what the
@@ -113,6 +130,15 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           if (file) {
             event.preventDefault();
             insertImageFromFile(file);
+            return true;
+          }
+        }
+        const videoItem = items.find(item => item.type.startsWith("video/"));
+        if (videoItem) {
+          const file = videoItem.getAsFile();
+          if (file) {
+            event.preventDefault();
+            insertVideoFromFile(file);
             return true;
           }
         }
@@ -154,10 +180,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       handleDrop: (_view, event) => {
         const dt = (event as DragEvent).dataTransfer;
         if (!dt) return false;
-        const file = Array.from(dt.files).find(f => f.type.startsWith("image/"));
-        if (file) {
+        const imgFile = Array.from(dt.files).find(f => f.type.startsWith("image/"));
+        if (imgFile) {
           event.preventDefault();
-          insertImageFromFile(file);
+          insertImageFromFile(imgFile);
+          return true;
+        }
+        const videoFile = Array.from(dt.files).find(f => f.type.startsWith("video/"));
+        if (videoFile) {
+          event.preventDefault();
+          insertVideoFromFile(videoFile);
           return true;
         }
         return false;
@@ -213,11 +245,46 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     }
   }
 
+  async function insertVideoFromFile(file: File) {
+    if (!editor) return;
+    let result;
+    try {
+      result = await readVideoFile(file);
+    } catch (err) {
+      if (err instanceof VideoTooLargeError) {
+        alert("Video is larger than 500 MB and cannot be imported.");
+      } else {
+        alert("Couldn't decode this video file.");
+      }
+      return;
+    }
+    const { blob, posterDataUrl, aspect, mimeType } = result;
+    const blockId = crypto.randomUUID();
+    const url = getVideoUrl(blockId, blob);
+    videoBlobsRef.current.set(blockId, blob);
+    videoUrlsRef.current.set(blockId, url);
+
+    const attrs = { src: url, blockId, poster: posterDataUrl, aspect, mimeType };
+    const pos = videoInsertPosRef.current;
+    videoInsertPosRef.current = null;
+
+    if (pos !== null) {
+      editor.chain().focus()
+        .insertContentAt(pos, { type: "video", attrs })
+        .run();
+    } else {
+      editor.chain().focus()
+        .insertContent({ type: "video", attrs })
+        .run();
+    }
+  }
+
   useEffect(() => {
     if (editor) {
       editor.setEditable(editable);
       if (editable) {
-        const hasHeaderImage = editor.getJSON().content?.[0]?.type === "image";
+        const firstType = editor.getJSON().content?.[0]?.type;
+        const hasHeaderImage = firstType === "image" || firstType === "video";
         if (hasHeaderImage) {
           // Collapse any NodeSelection before blurring — without this the
           // header image stays marked .ProseMirror-selectednode on open.
@@ -454,20 +521,27 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   function handlePlusSelect(def: BlockDef) {
     if (!editor) return;
 
-    if (def.type === "image") {
+    if (def.type === "image" || def.type === "video") {
       const { $from } = editor.state.selection;
       const parentEmpty = $from.parent.content.size === 0;
+      let insertPos: number;
       if (parentEmpty) {
         const blockStart = $from.before();
         const blockEnd = $from.after();
-        imageInsertPosRef.current = blockStart;
+        insertPos = blockStart;
         editor.chain().deleteRange({ from: blockStart, to: blockEnd }).run();
       } else {
         const blockEnd = $from.after();
         editor.chain().insertContentAt(blockEnd, { type: "paragraph" }).run();
-        imageInsertPosRef.current = blockEnd;
+        insertPos = blockEnd;
       }
-      fileInputRef.current?.click();
+      if (def.type === "image") {
+        imageInsertPosRef.current = insertPos;
+        fileInputRef.current?.click();
+      } else {
+        videoInsertPosRef.current = insertPos;
+        videoInputRef.current?.click();
+      }
     } else {
       applyBlockType(def);
     }
@@ -488,6 +562,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         onChange={async (e) => {
           const file = e.target.files?.[0];
           if (file) await insertImageFromFile(file);
+          e.target.value = "";
+        }}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (file) await insertVideoFromFile(file);
           e.target.value = "";
         }}
       />

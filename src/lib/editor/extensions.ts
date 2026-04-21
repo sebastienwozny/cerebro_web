@@ -1,8 +1,10 @@
+import { Node, mergeAttributes } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import BaseImage from "@tiptap/extension-image";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { createLowlight, common } from "lowlight";
 import CodeBlockView from "../../components/CodeBlockView";
+import VideoBlockView from "../../components/VideoBlockView";
 
 const lowlight = createLowlight(common);
 
@@ -28,6 +30,72 @@ export const CodeBlockWithView = CodeBlockLowlight.extend({
 }).configure({
   lowlight,
   defaultLanguage: "plaintext",
+});
+
+// Native <video> block. The underlying Blob isn't stored in the document —
+// only `blockId` (a stable UUID the save path uses to reattach the Blob) and
+// `src` (an object URL created by the editor wrapper). Poster, aspect, and
+// MIME type round-trip through attrs so the serializer doesn't need a
+// separate metadata map.
+export const VideoBlock = Node.create({
+  name: "video",
+  group: "block",
+  atom: true,
+  // Not draggable: HTML5 drag-detection on the NodeView wrapper swallows
+  // mousedown on the native <video> controls, which breaks play/pause and
+  // scrubbing. GlobalDragHandle still provides drag-to-reorder via its gripper.
+  draggable: false,
+  selectable: true,
+
+  addAttributes() {
+    return {
+      src: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("src"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.src ? { src: String(attrs.src) } : {},
+      },
+      blockId: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-block-id"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.blockId ? { "data-block-id": String(attrs.blockId) } : {},
+      },
+      poster: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("poster"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.poster ? { poster: String(attrs.poster) } : {},
+      },
+      aspect: {
+        default: null,
+        parseHTML: (el) => {
+          const v = el.getAttribute("data-aspect");
+          return v ? parseFloat(v) : null;
+        },
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.aspect ? { "data-aspect": String(attrs.aspect) } : {},
+      },
+      mimeType: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-mime"),
+        renderHTML: (attrs: Record<string, unknown>) =>
+          attrs.mimeType ? { "data-mime": String(attrs.mimeType) } : {},
+      },
+    };
+  },
+
+  parseHTML() {
+    return [{ tag: "video[data-block-id]" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["video", mergeAttributes(HTMLAttributes, { controls: "true" })];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(VideoBlockView, { as: "div" });
+  },
 });
 
 // Extend Tiptap Image to carry aspect ratio
