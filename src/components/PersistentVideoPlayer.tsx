@@ -41,6 +41,11 @@ interface Props {
   /** Hide the video element so the poster shows through. Used during close so
    *  the final canvas-card poster hand-off isn't a jump from last-frame to first. */
   showPoster?: boolean;
+  /** When true, portal into document.body (above everything). Used for the
+   *  card currently opening/open/closing so the video sits above the editor.
+   *  When false, portal into #pvp-portal-root inside Canvas, which sits
+   *  below the white overlay so canvas-rest videos are naturally covered. */
+  portalToBody?: boolean;
 }
 
 /**
@@ -62,7 +67,7 @@ function PersistentVideoPlayerImpl({
   blockId, videoBlob, posterDataUrl,
   canvasRect, openRect, openProgress, editorScrollY,
   playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
-  transformTransition = false, showPoster = false,
+  transformTransition = false, showPoster = false, portalToBody = false,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
@@ -162,11 +167,10 @@ function PersistentVideoPlayerImpl({
   // the outer layer preserves the dark rendering during drag.
   const outerTransform = `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`;
   const outerOrigin = isDragMode ? "top center" : "center";
-  // Inner layer: always carries a non-identity scale so it stays promoted to
-  // its own compositor layer. scale(1.02) on hover, scale(1) otherwise — both
-  // keep the layer composited and on the same color path, so switching
-  // hover/non-hover doesn't cause a brightness shift.
-  const innerScale = isHovered && t === 0 ? 1.02 : 1;
+  // Inner layer uses a stable translateZ(0) only — no scale animation. Any
+  // scale change on the direct parent of the <video> causes Chrome to
+  // resample the texture, which reads as a brightness flash (notably at the
+  // end of the close animation where scale transitions from 1 → 1.02).
 
   return createPortal(
     // Outer div: translates (and rotates during drag). Follows canvas pan
@@ -192,7 +196,7 @@ function PersistentVideoPlayerImpl({
         style={{
           width: "100%",
           height: "100%",
-          transform: `translateZ(0) scale(${innerScale})`,
+          transform: "translateZ(0)",
           transformOrigin: "center",
           willChange: "transform",
           transition: transformTransition ? "transform 0.15s ease-out" : "none",
@@ -237,7 +241,9 @@ function PersistentVideoPlayerImpl({
         />
       </div>
     </div>,
-    document.body,
+    portalToBody
+      ? document.body
+      : (document.getElementById("pvp-portal-root") ?? document.body),
   );
 }
 

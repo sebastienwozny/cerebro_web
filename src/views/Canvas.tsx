@@ -655,6 +655,16 @@ export default function Canvas() {
         />
       )}
 
+      {/* Persistent video portal root. Sits *below* the white overlay in
+          z-order so that video PVPs of non-opening cards are naturally
+          covered when another card is open — no hide/fade trick needed.
+          The opening video card's PVP opts out of this via `portalToBody`. */}
+      <div
+        id="pvp-portal-root"
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 9997 }}
+      />
+
       {/* White overlay */}
       {openProgress > 0 && (
         <div

@@ -276,7 +276,12 @@ function NoteCard({
                   : t > 0
                     ? "none"
                     : isHovered && !isSelected && !suppressScale && !isResizing
-                      ? "scale(1.02)"
+                      // Video cards skip the hover scale: resampling the
+                      // <video> texture under a scale transition causes a
+                      // brightness flash (most visible at close end).
+                      ? headerMedia?.type === "video"
+                        ? "none"
+                        : "scale(1.02)"
                       : "none",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
@@ -508,6 +513,13 @@ function NoteCard({
           open → close. No swap, continuous playback. */}
       {headerMedia?.type === "video" && !suppressVideoPortal && (() => {
         const hoverActive = cursorInside && !hoverSuppressed && !isOpen;
+        // For `playing`, intentionally skip the hoverSuppressed gate. Otherwise
+        // `playing` flips false→true the instant another card finishes closing
+        // (openNoteId→null lifts hoverSuppressed), which triggers a fresh
+        // play() call — Chrome re-composites the video layer and the color
+        // path momentarily resolves to its non-color-managed branch, reading
+        // as a brightness flash on the canvas videos.
+        const playingHover = cursorInside && !isOpen;
         // Always mount the PVP for video cards. This keeps the native <video>
         // element rendering at rest (paused at t=0) instead of falling back
         // to the JPEG poster, which goes through a different color path and
@@ -533,17 +545,14 @@ function NoteCard({
           borderRadius: cardRadius * scale,
         };
 
-        // Play only when actively engaged (hover, opening/open, resizing).
-        // At rest, the video stays paused at currentTime=0 so the user sees
-        // the native video frame (not the JPEG poster). Close anim freezes.
-        const playing = (hoverActive || t > 0 || isResizing) && !isClosing;
+        // Play while actively engaged OR animating (hover, opening/open,
+        // resizing, closing). Keeping it playing through the close animation
+        // avoids a play()-triggered compositor flash at t=0 when the close
+        // finalizes. At canvas rest, the video is paused at currentTime=0.
+        const playing = playingHover || t > 0 || isResizing || isClosing;
         const unlocked = editing;
         const pointerEvents = editing ? "auto" : "none";
 
-        // rotationDeg is forced to 0 for video cards: any ancestor rotation
-        // pushes Chrome's video compositor onto its non-color-managed path,
-        // which renders noticeably lighter than the rest state. Video cards
-        // translate during drag but don't tilt.
         return (
           <PersistentVideoPlayer
             blockId={headerMedia.blockId}
@@ -556,6 +565,7 @@ function NoteCard({
             playing={playing}
             unlocked={unlocked}
             zIndex="var(--z-editor-controls)"
+            portalToBody={isShadowInstance || t > 0 || isClosing}
             pointerEvents={pointerEvents}
             rotationDeg={0}
             isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
