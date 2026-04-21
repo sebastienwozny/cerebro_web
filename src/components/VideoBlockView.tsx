@@ -25,7 +25,6 @@ export default function VideoBlockView({ node }: NodeViewProps) {
         width: "100%",
         aspectRatio: aspectCss,
         borderRadius: 6,
-        lineHeight: 0,
       }}
       draggable={false}
     />

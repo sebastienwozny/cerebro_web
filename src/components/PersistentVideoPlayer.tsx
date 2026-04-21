@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getVideoUrl } from "../lib/videoUrlCache";
 
@@ -54,6 +54,14 @@ interface Props {
    *  applies the same 0.35s left/top transition so it tracks the card in the
    *  rest/canvas-space mode. No-op when `portalToBody` is true. */
   animateLeftTop?: boolean;
+  /** Draw the selection border over the video. The card's own selection
+   *  border is inside the clipped card content, which on video cards is
+   *  fully covered by the PVP above — so the PVP needs to render its own. */
+  isSelected?: boolean;
+  /** Extra nodes rendered above the video (outside the rounded clip), used
+   *  for interactive overlays the card can't reach because the PVP covers
+   *  it — notably the resize corner handles. */
+  children?: ReactNode;
 }
 
 /**
@@ -76,7 +84,7 @@ function PersistentVideoPlayerImpl({
   canvasRect, openRect, openProgress, editorScrollY,
   playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
   transformTransition = false, showPoster = false, portalToBody = false,
-  animateLeftTop = false,
+  animateLeftTop = false, isSelected = false, children,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
@@ -270,7 +278,26 @@ function PersistentVideoPlayerImpl({
             display: showPoster ? "none" : "block",
           }}
         />
+        {/* Selection border — rendered here (not on the card) because on
+            video cards the PVP covers the card entirely, hiding the card's
+            own border overlay. borderRadius matches the inner clip so the
+            corners trace the same rounded shape as the card. */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+            border: "4px solid var(--color-selection-border)",
+            borderRadius: radius,
+            boxSizing: "border-box",
+            opacity: isSelected ? 1 : 0,
+            transition: "opacity 150ms ease-out",
+          }}
+        />
       </div>
+      {/* Outside the rounded clip: corner resize handles for video cards.
+          Rendered by NoteCard, positioned absolute against the outer div. */}
+      {children}
     </div>,
     portalToBody
       ? document.body

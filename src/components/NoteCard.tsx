@@ -247,6 +247,23 @@ function NoteCard({
   const isFollowing = !isDragging && (groupDragDelta.dx !== 0 || groupDragDelta.dy !== 0 || groupDragRotation !== 0);
   const rotation = isDragging ? dragRotation : groupDragRotation;
 
+  // Resize corners — same JSX rendered either inside the card (image cards)
+  // or inside the PVP overlay (video cards, since the PVP covers the card).
+  const cornerOverlay = isImageCard && openProgress === 0 && !isDragging ? (() => {
+    const showCorners = isPointerOver && !hoverSuppressed && !isSelected;
+    const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.10), 70);
+    const strokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
+    return (
+      <>
+        <CornerHandle position="top-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, -1)} />
+        <CornerHandle position="top-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, -1)} />
+        <CornerHandle position="bottom-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, 1)} />
+        <CornerHandle position="bottom-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, 1)} />
+      </>
+    );
+  })() : null;
+  const isVideoCard = headerMedia?.type === "video";
+
   return (
     <>
       {!isShadowInstance && (
@@ -420,20 +437,9 @@ function NoteCard({
         {/* Close clipped card content */}
         </div>
 
-        {/* Resize handles — image cards only */}
-        {isImageCard && openProgress === 0 && !isDragging && (() => {
-          const showCorners = isPointerOver && !hoverSuppressed && !isSelected;
-          const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.10), 70);
-          const strokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
-          return (
-          <>
-            <CornerHandle position="top-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, -1)} />
-            <CornerHandle position="top-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, -1)} />
-            <CornerHandle position="bottom-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, 1)} />
-            <CornerHandle position="bottom-right" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(1, 1)} />
-          </>
-          );
-        })()}
+        {/* Resize handles — image cards render them here (inside the card).
+            Video cards render them via PVP so they sit above the video. */}
+        {!isVideoCard && cornerOverlay}
       </div>
       )}
 
@@ -581,12 +587,15 @@ function NoteCard({
             zIndex="var(--z-editor-controls)"
             portalToBody={portalToBody}
             animateLeftTop={!!isAnimating && !isDragging && !isFollowing && t === 0}
+            isSelected={isSelected && openProgress < 0.1}
             pointerEvents={pointerEvents}
             rotationDeg={0}
             isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
             transformTransition={t === 0 && !isDragging && !isFollowing && !isResizing}
             showPoster={false}
-          />
+          >
+            {cornerOverlay}
+          </PersistentVideoPlayer>
         );
       })()}
     </>

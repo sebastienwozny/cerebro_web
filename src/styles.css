@@ -590,10 +590,10 @@ html, body, #root {
 
 /* Media card (image/video) — fade in text below header media on open */
 .image-card-open .tiptap > img:first-child,
-.image-card-open .tiptap > .video-block-wrap:first-child {
+.image-card-open .tiptap > .node-video:first-child {
   margin-top: 0;
 }
-.image-card-open .tiptap > *:not(img):not(.video-block-wrap) {
+.image-card-open .tiptap > *:not(img):not(.node-video) {
   animation: fadeIn 0.3s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
@@ -602,14 +602,22 @@ html, body, #root {
 .image-card-closing .tiptap .video-block-wrap {
   visibility: hidden;
 }
-.image-card-closing .tiptap > *:not(img):not(.video-block-wrap) {
+.image-card-closing .tiptap > *:not(img):not(.node-video) {
   opacity: var(--text-fade, 1);
 }
 
-/* Video block wrapper inside the editor */
+/* Video block wrapper inside the editor. Margin lives on the outer
+   `.node-video` (the react-renderer wrapper that's the actual child of
+   `.tiptap`) so `.tiptap > *:first-child { margin-top: 0 }` applies cleanly
+   and the global drag handle — which measures the outer wrapper — lands on
+   the video's visible top instead of 12px below it. */
+.tiptap .node-video { margin: 12px 0; }
 .tiptap .video-block-wrap {
   width: 100%;
-  margin: 12px 0;
+  /* Explicit 24px so the global drag handle + our "+" land at rect.top.
+     Formula is rect.top + (lineHeight - 24) / 2 — any other value offsets them
+     vertically. */
+  line-height: 24px;
 }
 .tiptap .video-block-wrap video {
   display: block;
