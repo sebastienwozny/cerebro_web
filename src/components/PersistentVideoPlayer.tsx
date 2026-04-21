@@ -41,11 +41,19 @@ interface Props {
   /** Hide the video element so the poster shows through. Used during close so
    *  the final canvas-card poster hand-off isn't a jump from last-frame to first. */
   showPoster?: boolean;
-  /** When true, portal into document.body (above everything). Used for the
-   *  card currently opening/open/closing so the video sits above the editor.
-   *  When false, portal into #pvp-portal-root inside Canvas, which sits
-   *  below the white overlay so canvas-rest videos are naturally covered. */
+  /** When true, portal into document.body (above everything) and position via
+   *  fixed+translate3d in screen space. Used for the card currently
+   *  opening/open/closing so the video sits above the editor and lerps
+   *  smoothly between canvas rect and open rect.
+   *  When false, portal into #pvp-portal-root inside the canvas layer and
+   *  position via absolute left/top in *canvas space*. The layer's transform
+   *  handles pan/zoom so the PVP moves in lockstep with canvas cards with no
+   *  per-frame React re-render. */
   portalToBody?: boolean;
+  /** True when the card is running a post-drag / undo spring animation. PVP
+   *  applies the same 0.35s left/top transition so it tracks the card in the
+   *  rest/canvas-space mode. No-op when `portalToBody` is true. */
+  animateLeftTop?: boolean;
 }
 
 /**
@@ -68,6 +76,7 @@ function PersistentVideoPlayerImpl({
   canvasRect, openRect, openProgress, editorScrollY,
   playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
   transformTransition = false, showPoster = false, portalToBody = false,
+  animateLeftTop = false,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
@@ -151,39 +160,61 @@ function PersistentVideoPlayerImpl({
   };
 
   const t = Math.max(0, Math.min(1, openProgress));
-  const x = lerp(canvasRect.left, openRect.left, t);
-  // Editor-scroll offset only applies at t=1 (fully open); during the
-  // opening animation the openRect is the landing target in viewport coords.
-  const y = lerp(canvasRect.top, openRect.top - editorScrollY * t, t);
+  // In portalToBody mode canvasRect is in screen space, lerped with openRect
+  // (also screen) via openProgress. In canvas-rest mode canvasRect is in
+  // canvas space (t is always 0 in this mode, so the lerp is a no-op).
   const width = lerp(canvasRect.width, openRect.width, t);
   const height = lerp(canvasRect.height, openRect.height, t);
   const radius = lerp(canvasRect.borderRadius, openRect.borderRadius, t);
-  const rot = rotationDeg * (1 - t);
-  const isDragMode = Math.abs(rot) > 0.001;
-  // Rotation goes on the OUTER layer (alongside translate3d). Chrome's video
-  // compositor picks its color-managed "dark" path only when the direct
-  // ancestor layer of the <video> has a stable scale-only transform — adding
-  // a rotate there pushes it onto the "light" path. Keeping rotation up on
-  // the outer layer preserves the dark rendering during drag.
-  const outerTransform = `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`;
-  const outerOrigin = isDragMode ? "top center" : "center";
+
+  let outerPositionStyle: React.CSSProperties;
+  if (portalToBody) {
+    const x = lerp(canvasRect.left, openRect.left, t);
+    // Editor-scroll offset only applies at t=1 (fully open); during the
+    // opening animation the openRect is the landing target in viewport coords.
+    const y = lerp(canvasRect.top, openRect.top - editorScrollY * t, t);
+    const rot = rotationDeg * (1 - t);
+    const isDragMode = Math.abs(rot) > 0.001;
+    // Rotation goes on the OUTER layer (alongside translate3d). Chrome's video
+    // compositor picks its color-managed "dark" path only when the direct
+    // ancestor layer of the <video> has a stable scale-only transform — adding
+    // a rotate there pushes it onto the "light" path. Keeping rotation up on
+    // the outer layer preserves the dark rendering during drag.
+    outerPositionStyle = {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      transform: `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`,
+      transformOrigin: isDragMode ? "top center" : "center",
+      willChange: "transform",
+      // Explicitly cleared so a left/top transition carried over from rest
+      // mode doesn't fire when `left`/`top` reset to 0 on mode switch.
+      transition: "none",
+    };
+  } else {
+    // Rest / canvas-space mode. Positioned via left/top inside pvp-portal-root
+    // which lives in the scaled canvas layer, so pan/zoom are handled by the
+    // layer's transform — no per-frame React work and no pan-lag between card
+    // and PVP. Matches the card's post-drag/undo spring via `animateLeftTop`.
+    outerPositionStyle = {
+      position: "absolute",
+      left: canvasRect.left,
+      top: canvasRect.top,
+      transition: animateLeftTop
+        ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1)"
+        : "none",
+    };
+  }
   // Inner layer uses a stable translateZ(0) only — no scale animation. Any
   // scale change on the direct parent of the <video> causes Chrome to
   // resample the texture, which reads as a brightness flash (notably at the
   // end of the close animation where scale transitions from 1 → 1.02).
 
   return createPortal(
-    // Outer div: translates (and rotates during drag). Follows canvas pan
-    // instantly (no CSS transition) so the portal stays locked to the card.
     <div
       onWheel={onWheel}
       style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        transform: outerTransform,
-        transformOrigin: outerOrigin,
-        willChange: "transform",
+        ...outerPositionStyle,
         width,
         height,
         zIndex,

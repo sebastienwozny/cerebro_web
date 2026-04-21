@@ -655,16 +655,6 @@ export default function Canvas() {
         />
       )}
 
-      {/* Persistent video portal root. Sits *below* the white overlay in
-          z-order so that video PVPs of non-opening cards are naturally
-          covered when another card is open — no hide/fade trick needed.
-          The opening video card's PVP opts out of this via `portalToBody`. */}
-      <div
-        id="pvp-portal-root"
-        className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 9997 }}
-      />
-
       {/* White overlay */}
       {openProgress > 0 && (
         <div
@@ -761,6 +751,15 @@ export default function Canvas() {
             </div>
           );
         })}
+        {/* Persistent video portal root — lives inside the layer so the layer's
+            transform handles canvas pan/zoom for free (no per-frame React
+            re-renders, no pan lag). Positioned at layer origin; PVPs portal in
+            with canvas-space absolute coords. Covered by the white overlay
+            (outside the layer, z 9998) when another card opens. */}
+        <div
+          id="pvp-portal-root"
+          style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", zIndex: 9997 }}
+        />
       </div>
 
       {/* Opening/open card */}

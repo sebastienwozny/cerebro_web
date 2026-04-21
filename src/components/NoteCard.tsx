@@ -537,13 +537,27 @@ function NoteCard({
           height: editorImgH,
           borderRadius: 6,
         };
-        const canvasRect = {
-          left: cardScreenLeft + groupDragDelta.dx * scale,
-          top: cardScreenTop + groupDragDelta.dy * scale,
-          width: cardW * scale,
-          height: cardH * scale,
-          borderRadius: cardRadius * scale,
-        };
+        // Switch PVP positioning between screen space (body portal, animating
+        // via translate3d) and canvas space (layer portal, moving with layer
+        // transform for zero-lag pan/zoom). The screen version is used while
+        // open/closing so the PVP can sit above the editor; the canvas one at
+        // rest so it composites through the layer's transform.
+        const portalToBody = isShadowInstance || t > 0 || isClosing;
+        const canvasRect = portalToBody
+          ? {
+              left: cardScreenLeft + groupDragDelta.dx * scale,
+              top: cardScreenTop + groupDragDelta.dy * scale,
+              width: cardW * scale,
+              height: cardH * scale,
+              borderRadius: cardRadius * scale,
+            }
+          : {
+              left: note.positionX - cardW / 2 + groupDragDelta.dx,
+              top: note.positionY - cardH / 2 + groupDragDelta.dy,
+              width: cardW,
+              height: cardH,
+              borderRadius: cardRadius,
+            };
 
         // Play while actively engaged OR animating (hover, opening/open,
         // resizing, closing). Keeping it playing through the close animation
@@ -565,7 +579,8 @@ function NoteCard({
             playing={playing}
             unlocked={unlocked}
             zIndex="var(--z-editor-controls)"
-            portalToBody={isShadowInstance || t > 0 || isClosing}
+            portalToBody={portalToBody}
+            animateLeftTop={!!isAnimating && !isDragging && !isFollowing && t === 0}
             pointerEvents={pointerEvents}
             rotationDeg={0}
             isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
