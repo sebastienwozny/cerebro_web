@@ -41,10 +41,7 @@ export const VideoBlock = Node.create({
   name: "video",
   group: "block",
   atom: true,
-  // Not draggable: HTML5 drag-detection on the NodeView wrapper swallows
-  // mousedown on the native <video> controls, which breaks play/pause and
-  // scrubbing. GlobalDragHandle still provides drag-to-reorder via its gripper.
-  draggable: false,
+  draggable: true,
   selectable: true,
 
   addAttributes() {

@@ -7,7 +7,7 @@ import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
  * space (matching aspect ratio) so text below lands correctly.
  */
 export default function VideoBlockView({ node }: NodeViewProps) {
-  const { aspect } = node.attrs as {
+  const { aspect, poster } = node.attrs as {
     src: string | null;
     poster: string | null;
     aspect: number | null;
@@ -25,6 +25,14 @@ export default function VideoBlockView({ node }: NodeViewProps) {
         width: "100%",
         aspectRatio: aspectCss,
         borderRadius: 6,
+        /* Poster as background-image so the HTML5 drag ghost (setDragImage
+           snapshot) captures something. Using background-image instead of an
+           <img> child keeps the wrapper's layout rect tight around the video
+           area — an inline/replaced child can shift the rect via baseline /
+           line-box rules. */
+        backgroundImage: poster ? `url(${poster})` : undefined,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
       }}
       draggable={false}
     />

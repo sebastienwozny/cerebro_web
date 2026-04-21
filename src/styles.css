@@ -611,13 +611,13 @@ html, body, #root {
    `.tiptap`) so `.tiptap > *:first-child { margin-top: 0 }` applies cleanly
    and the global drag handle — which measures the outer wrapper — lands on
    the video's visible top instead of 12px below it. */
-.tiptap .node-video { margin: 12px 0; }
+/* Explicit 24px so the global drag handle + our "+" land at rect.top —
+   the handle measures `.node-video` (direct child of `.tiptap`), so the
+   line-height must be set here, not on `.video-block-wrap` inside.
+   Formula: rect.top + (lineHeight - 24) / 2. */
+.tiptap .node-video { margin: 12px 0; line-height: 24px; }
 .tiptap .video-block-wrap {
   width: 100%;
-  /* Explicit 24px so the global drag handle + our "+" land at rect.top.
-     Formula is rect.top + (lineHeight - 24) / 2 — any other value offsets them
-     vertically. */
-  line-height: 24px;
 }
 .tiptap .video-block-wrap video {
   display: block;
