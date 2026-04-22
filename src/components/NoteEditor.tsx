@@ -299,6 +299,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   useEditorDragScroll(editor, editable);
 
+  useEffect(() => {
+    if (!editor || !editable) return;
+    const onDelete = () => {
+      const firstNode = editor.state.doc.firstChild;
+      if (firstNode?.type.name !== "video") return;
+      editor.chain().setNodeSelection(0).deleteSelection().focus(undefined, { scrollIntoView: false }).run();
+    };
+    window.addEventListener("pvp-header-delete", onDelete);
+    return () => window.removeEventListener("pvp-header-delete", onDelete);
+  }, [editor, editable]);
+
   // Click below content to insert empty lines
   useEffect(() => {
     if (!editor || !editable) return;

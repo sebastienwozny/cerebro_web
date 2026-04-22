@@ -87,6 +87,7 @@ function PersistentVideoPlayerImpl({
   animateLeftTop = false, isSelected = false, children,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
   const instanceIdRef = useRef<number>(0);
   if (instanceIdRef.current === 0) {
@@ -157,6 +158,30 @@ function PersistentVideoPlayerImpl({
     v.controls = unlocked;
   }, [unlocked]);
 
+  const [localSelected, setLocalSelected] = useState(false);
+  useEffect(() => {
+    if (!unlocked) { setLocalSelected(false); return; }
+    const onDocClick = (e: MouseEvent) => {
+      if (!outerRef.current?.contains(e.target as Node)) setLocalSelected(false);
+    };
+    document.addEventListener("click", onDocClick, true);
+    return () => document.removeEventListener("click", onDocClick, true);
+  }, [unlocked]);
+
+  useEffect(() => {
+    if (!localSelected) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        e.stopPropagation();
+        window.dispatchEvent(new CustomEvent("pvp-header-delete"));
+        setLocalSelected(false);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [localSelected]);
+
   const progressFillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const v = videoRef.current;
@@ -168,7 +193,7 @@ function PersistentVideoPlayerImpl({
     };
     v.addEventListener("timeupdate", onTimeUpdate);
     return () => v.removeEventListener("timeupdate", onTimeUpdate);
-  }, []);
+  }, [portalToBody]);
 
   // Wheel forwarding — during open (pointerEvents:"auto") the video element
   // catches wheel events that would otherwise scroll the editor overlay. We
@@ -233,13 +258,16 @@ function PersistentVideoPlayerImpl({
 
   return createPortal(
     <div
+      ref={outerRef}
       onWheel={onWheel}
+      onClick={() => { if (unlocked) setLocalSelected(true); }}
       style={{
         ...outerPositionStyle,
         width,
         height,
         zIndex,
         pointerEvents,
+        borderRadius: radius,
       }}
     >
       {/* Inner div: hover scale only, on its own stable GPU layer so the
@@ -291,22 +319,6 @@ function PersistentVideoPlayerImpl({
             display: showPoster ? "none" : "block",
           }}
         />
-        {/* Selection border — rendered here (not on the card) because on
-            video cards the PVP covers the card entirely, hiding the card's
-            own border overlay. borderRadius matches the inner clip so the
-            corners trace the same rounded shape as the card. */}
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            border: "4px solid var(--color-selection-border)",
-            borderRadius: radius,
-            boxSizing: "border-box",
-            opacity: isSelected ? 1 : 0,
-            transition: "opacity 150ms ease-out",
-          }}
-        />
       </div>
       {/* Progress bar — sibling of the inner div so it lives on a separate
           layer and never perturbs the video's GPU compositor path. */}
@@ -320,7 +332,7 @@ function PersistentVideoPlayerImpl({
           borderRadius: 9999,
           overflow: "hidden",
           pointerEvents: "none",
-          opacity: playing && !unlocked ? 1 : 0,
+          opacity: playing && !unlocked && t === 0 ? 1 : 0,
           transition: "opacity 300ms ease-out",
         }}
       >
@@ -340,6 +352,19 @@ function PersistentVideoPlayerImpl({
           }}
         />
       </div>
+      {/* Selection ring — sibling of inner div, outside the clip. Matches
+          the same box-shadow style as images and non-header video blocks. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: -3,
+          borderRadius: radius + 3,
+          border: "3px solid var(--color-selection-border)",
+          pointerEvents: "none",
+          opacity: isSelected || localSelected ? 1 : 0,
+          transition: "opacity 150ms ease-out",
+        }}
+      />
       {/* Outside the rounded clip: corner resize handles for video cards.
           Rendered by NoteCard, positioned absolute against the outer div. */}
       {children}

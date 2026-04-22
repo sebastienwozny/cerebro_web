@@ -1,13 +1,16 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 
 /**
- * VideoBlock in the editor is just a spacer. The actual <video> element is a
- * single portal-rendered `PersistentVideoPlayer` owned by NoteCard that spans
- * hover → open → close with no remount. This component only reserves layout
- * space (matching aspect ratio) so text below lands correctly.
+ * VideoBlock in the editor.
+ *
+ * First block (pos === 1): just a spacer — PersistentVideoPlayer overlays it
+ * exactly and handles all rendering/playback across hover → open → close.
+ *
+ * Any other position: render a real <video> with native controls. The poster
+ * is shown until the user interacts.
  */
-export default function VideoBlockView({ node }: NodeViewProps) {
-  const { aspect, poster } = node.attrs as {
+export default function VideoBlockView({ node, getPos, selected }: NodeViewProps) {
+  const { src, poster, aspect } = node.attrs as {
     src: string | null;
     poster: string | null;
     aspect: number | null;
@@ -15,6 +18,36 @@ export default function VideoBlockView({ node }: NodeViewProps) {
   };
 
   const aspectCss = aspect && aspect > 0 ? `1 / ${aspect}` : "16 / 9";
+  const pos = typeof getPos === "function" ? getPos() : -1;
+  const isHeaderBlock = pos === 1;
+
+  if (!isHeaderBlock && src) {
+    return (
+      <NodeViewWrapper
+        as="div"
+        contentEditable={false}
+        className="video-block-wrap"
+        style={{
+          width: "100%",
+          aspectRatio: aspectCss,
+          borderRadius: 6,
+          overflow: "hidden",
+          boxShadow: selected ? "0 0 0 3px var(--color-selection-border)" : undefined,
+          transition: "box-shadow 150ms ease-out",
+        }}
+        draggable={false}
+      >
+        <video
+          src={src}
+          poster={poster ?? undefined}
+          controls
+          playsInline
+          preload="metadata"
+          style={{ width: "100%", height: "100%", display: "block", objectFit: "cover" }}
+        />
+      </NodeViewWrapper>
+    );
+  }
 
   return (
     <NodeViewWrapper
@@ -25,11 +58,6 @@ export default function VideoBlockView({ node }: NodeViewProps) {
         width: "100%",
         aspectRatio: aspectCss,
         borderRadius: 6,
-        /* Poster as background-image so the HTML5 drag ghost (setDragImage
-           snapshot) captures something. Using background-image instead of an
-           <img> child keeps the wrapper's layout rect tight around the video
-           area — an inline/replaced child can shift the rect via baseline /
-           line-box rules. */
         backgroundImage: poster ? `url(${poster})` : undefined,
         backgroundSize: "cover",
         backgroundPosition: "center",
