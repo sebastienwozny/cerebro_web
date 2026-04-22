@@ -563,12 +563,14 @@ export default function Canvas() {
     [selectedIds, setSelectedIds]
   );
 
-  // Context menu: right-click on canvas background — just prevent default
   const handleCanvasContextMenu = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      if (selectedIds.size > 0) {
+        setContextMenu({ x: e.clientX, y: e.clientY, noteId: null });
+      }
     },
-    []
+    [selectedIds]
   );
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -591,39 +593,38 @@ export default function Canvas() {
 
   // Build context menu items
   const contextMenuItems: MenuItem[] = contextMenu
-    ? contextMenu.noteId
-      ? [
-          {
-            icon: LayoutGrid,
-            label: "Reorder",
-            shortcut: `${MOD}G`,
-            action: reorderSelected,
-            hidden: selectedIds.size < 2,
-          },
-          {
-            icon: Copy,
-            label: "Copy",
-            shortcut: `${MOD}C`,
-            action: copySelected,
-          },
-          {
-            icon: Copy,
-            label: "Duplicate",
-            shortcut: `${MOD}D`,
-            action: duplicateSelected,
-          },
-          {
-            icon: Trash2,
-            label: "Delete",
-            shortcut: "⌫",
-            action: deleteSelected,
-          },
-        ]
-      : []
+    ? [
+        {
+          icon: LayoutGrid,
+          label: "Reorder",
+          shortcut: `${MOD}G`,
+          action: reorderSelected,
+          hidden: selectedIds.size < 2,
+        },
+        {
+          icon: Copy,
+          label: "Copy",
+          shortcut: `${MOD}C`,
+          action: copySelected,
+        },
+        {
+          icon: Copy,
+          label: "Duplicate",
+          shortcut: `${MOD}D`,
+          action: duplicateSelected,
+        },
+        {
+          icon: Trash2,
+          label: "Delete",
+          shortcut: "⌫",
+          action: deleteSelected,
+        },
+      ]
     : [];
 
   const handleCanvasPointerDown = useCallback(
     (e: React.PointerEvent) => {
+      if (e.button === 2) return;
       spacePanDown(e);
       if (!spaceHeld) {
         handleMarqueeDown(e);

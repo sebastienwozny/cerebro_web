@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { getVideoUrl } from "../lib/videoUrlCache";
 
@@ -157,6 +157,19 @@ function PersistentVideoPlayerImpl({
     v.controls = unlocked;
   }, [unlocked]);
 
+  const progressFillRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    const onTimeUpdate = () => {
+      const fill = progressFillRef.current;
+      if (!fill || v.duration <= 0) return;
+      fill.style.transform = `scaleX(${v.currentTime / v.duration})`;
+    };
+    v.addEventListener("timeupdate", onTimeUpdate);
+    return () => v.removeEventListener("timeupdate", onTimeUpdate);
+  }, []);
+
   // Wheel forwarding — during open (pointerEvents:"auto") the video element
   // catches wheel events that would otherwise scroll the editor overlay. We
   // find the scroll container and apply the deltaY manually.
@@ -292,6 +305,38 @@ function PersistentVideoPlayerImpl({
             boxSizing: "border-box",
             opacity: isSelected ? 1 : 0,
             transition: "opacity 150ms ease-out",
+          }}
+        />
+      </div>
+      {/* Progress bar — sibling of the inner div so it lives on a separate
+          layer and never perturbs the video's GPU compositor path. */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 15,
+          left: "30%",
+          right: "30%",
+          height: 8,
+          borderRadius: 9999,
+          overflow: "hidden",
+          pointerEvents: "none",
+          opacity: playing && !unlocked ? 1 : 0,
+          transition: "opacity 300ms ease-out",
+        }}
+      >
+        {/* Track */}
+        <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", borderRadius: 9999 }} />
+        {/* Fill */}
+        <div
+          ref={progressFillRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255,255,255,1)",
+            transformOrigin: "left",
+            transform: "scaleX(0)",
+            transition: "transform 0.25s linear",
+            borderRadius: 9999,
           }}
         />
       </div>

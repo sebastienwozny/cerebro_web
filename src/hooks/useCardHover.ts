@@ -66,7 +66,14 @@ export function useCardHover({
     }
   };
 
-  const onMouseLeave = () => {
+  const onMouseLeave = (e: React.MouseEvent) => {
+    // If the pointer is still within the card's bounding rect, it moved onto
+    // a portal overlay (e.g. PVP corner handle) — don't clear hover state.
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (rect) {
+      const { clientX: x, clientY: y } = e;
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return;
+    }
     setIsPointerOver(false);
     setIsHovered(false);
   };

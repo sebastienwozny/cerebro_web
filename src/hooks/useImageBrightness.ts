@@ -23,7 +23,7 @@ export function useImageBrightness(dataUrl: string | undefined): boolean {
       for (let i = 0; i < data.length; i += 4) {
         total += data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
       }
-      setIsLight(total / (size * size) > 160);
+      setIsLight(total / (size * size) > 128);
     };
     img.src = dataUrl;
   }, [dataUrl]);

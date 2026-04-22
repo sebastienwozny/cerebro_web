@@ -252,7 +252,7 @@ function NoteCard({
   const cornerOverlay = isImageCard && openProgress === 0 && !isDragging ? (() => {
     const showCorners = isPointerOver && !hoverSuppressed && !isSelected;
     const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.10), 70);
-    const strokeColor = isLightImage ? "rgba(0,0,0,0.2)" : "rgba(255,255,255,0.3)";
+    const strokeColor = isLightImage ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.35)";
     return (
       <>
         <CornerHandle position="top-left" size={cornerSize} strokeColor={strokeColor} visible={showCorners} resizeHandlers={makeResizeHandlers(-1, -1)} />
@@ -318,7 +318,7 @@ function NoteCard({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
         onPointerEnter={() => { if (!isDragging && !isResizing) { console.log("[NoteCard] pointerEnter -> cursorInside=true", { noteId: note.id, isShadowInstance }); setCursorInside(true); } }}
-        onPointerLeave={() => { if (!isDragging && !isResizing) { console.log("[NoteCard] pointerLeave -> cursorInside=false", { noteId: note.id, isShadowInstance }); setCursorInside(false); } }}
+        onPointerLeave={(e) => { if (!isDragging && !isResizing) { const r = cardRef.current?.getBoundingClientRect(); if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return; console.log("[NoteCard] pointerLeave -> cursorInside=false", { noteId: note.id, isShadowInstance }); setCursorInside(false); } }}
       >
         {/* Clipped card content */}
         <div
