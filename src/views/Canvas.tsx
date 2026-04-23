@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNotes } from "../store/useNotes";
 import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
@@ -110,7 +110,8 @@ export default function Canvas() {
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragDuplicateIdsRef = useRef<string[]>([]);
 
-  useEffect(() => { applyTransform(); }, [applyTransform]);
+  // Initialize both canvas layer and pvp-portal-root transforms before first paint.
+  useLayoutEffect(() => { applyTransform(); }, [applyTransform]);
 
   // Keep notes ref current for undo/redo
   const notesRef = useRef(notes);
@@ -752,16 +753,27 @@ export default function Canvas() {
             </div>
           );
         })}
-        {/* Persistent video portal root — lives inside the layer so the layer's
-            transform handles canvas pan/zoom for free (no per-frame React
-            re-renders, no pan lag). Positioned at layer origin; PVPs portal in
-            with canvas-space absolute coords. Covered by the white overlay
-            (outside the layer, z 9998) when another card opens. */}
-        <div
-          id="pvp-portal-root"
-          style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", zIndex: 9997 }}
-        />
       </div>
+
+      {/* Persistent video portal root — OUTSIDE the canvas layer so it is not
+          inside the layer's scale() transform. The scale() creates a new
+          compositor stacking context; when PVPs switch from this root to
+          document.body on open, Chrome re-composites the video texture (different
+          color path) causing the visible saccade. By keeping this root outside
+          the scaled layer both portal targets share the same compositor context.
+          Transform is mirrored from the canvas layer via applyTransform (direct
+          DOM, no React re-renders) so pan/zoom still has zero lag. */}
+      <div
+        id="pvp-portal-root"
+        style={{
+          position: "fixed",
+          left: windowSize.w / 2,
+          top: windowSize.h / 2,
+          transformOrigin: "top left",
+          pointerEvents: "none",
+          zIndex: 9997,
+        }}
+      />
 
       {/* Opening/open card */}
       {openNoteId && openProgress > 0 && notes.filter(n => n.id === openNoteId).map((note) => (

@@ -22,6 +22,12 @@ export function useOpenClose(
       setOpenTransform({ ...getTransform() });
       setOpenNoteId(id);
       setIsClosing(false);
+      // Seed progress to a tiny positive value so the opening card is rendered
+      // (openProgress > 0 gate) and portalToBody activates in the SAME React
+      // render as the tap — eliminating the one-frame gap where the canvas card
+      // div is hidden but the opening card hasn't appeared yet (the saccade).
+      progressRef.current.value = 0.001;
+      setOpenProgress(0.001);
       tweenRef.current?.kill();
       tweenRef.current = gsap.to(progressRef.current, {
         value: 1,

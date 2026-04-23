@@ -7,7 +7,7 @@ import { useCardResize } from "../hooks/useCardResize";
 import { useImageBrightness } from "../hooks/useImageBrightness";
 import { CARD_CONTENT_W } from "../constants";
 import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
-import PersistentVideoPlayer from "./PersistentVideoPlayer";
+import PersistentVideoPlayer, { prewarmAudio } from "./PersistentVideoPlayer";
 
 interface Props {
   note: Note;
@@ -339,7 +339,10 @@ function NoteCard({
                   : "var(--shadow-card-rest)",
             transition: "box-shadow 0.2s ease-out",
           }}
-          onPointerDown={isResizing || spaceHeld ? undefined : (e) => { handlePointerDown(e); }}
+          onPointerDown={isResizing || spaceHeld ? undefined : (e) => {
+            if (headerMedia?.type === "video") prewarmAudio(headerMedia.blockId);
+            handlePointerDown(e);
+          }}
         >
         {/* Inner wrapper */}
         <div
@@ -543,11 +546,6 @@ function NoteCard({
           height: editorImgH,
           borderRadius: 6,
         };
-        // Switch PVP positioning between screen space (body portal, animating
-        // via translate3d) and canvas space (layer portal, moving with layer
-        // transform for zero-lag pan/zoom). The screen version is used while
-        // open/closing so the PVP can sit above the editor; the canvas one at
-        // rest so it composites through the layer's transform.
         const portalToBody = isShadowInstance || t > 0 || isClosing;
         const canvasRect = portalToBody
           ? {
@@ -569,7 +567,11 @@ function NoteCard({
         // resizing, closing). Keeping it playing through the close animation
         // avoids a play()-triggered compositor flash at t=0 when the close
         // finalizes. At canvas rest, the video is paused at currentTime=0.
-        const playing = playingHover || t > 0 || isResizing || isClosing;
+        // isShadowInstance keeps playing=true during the first render after tap
+        // (before t>0), so the cursorInside reset that happens on shadow mount
+        // doesn't trigger a pause()+seek(0) mid-playback — which was the cause
+        // of the visible saccade at open start.
+        const playing = playingHover || isShadowInstance || t > 0 || isResizing || isClosing;
         const unlocked = editing;
         const pointerEvents = editing ? "auto" : "none";
 

@@ -45,7 +45,12 @@ export function useCanvas() {
     const el = layerRef.current;
     if (!el) return;
     const { offsetX, offsetY, scale } = transformRef.current;
-    el.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
+    const t = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
+    el.style.transform = t;
+    // Mirror the same transform to the PVP portal root so it stays in sync
+    // with the canvas layer without React re-renders — zero pan lag.
+    const pvpRoot = document.getElementById("pvp-portal-root");
+    if (pvpRoot) pvpRoot.style.transform = t;
     scheduleRerender();
   }, [scheduleRerender]);
 

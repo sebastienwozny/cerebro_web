@@ -1,5 +1,6 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { getVideoUrl } from "../lib/videoUrlCache";
 
 export interface Rect {
@@ -25,7 +26,7 @@ interface Props {
   editorScrollY: number;
   /** Whether the video should be actively playing. */
   playing: boolean;
-  /** Unmute and show native controls (only in the open state). */
+  /** Unmute the video (only in the open state). */
   unlocked: boolean;
   /** z-index (must sit above both the canvas card and the editor overlay). */
   zIndex: string | number;
@@ -51,8 +52,7 @@ interface Props {
    *  per-frame React re-render. */
   portalToBody?: boolean;
   /** True when the card is running a post-drag / undo spring animation. PVP
-   *  applies the same 0.35s left/top transition so it tracks the card in the
-   *  rest/canvas-space mode. No-op when `portalToBody` is true. */
+   *  applies a 0.35s transform transition so it tracks the card smoothly. */
   animateLeftTop?: boolean;
   /** Draw the selection border over the video. The card's own selection
    *  border is inside the clipped card content, which on video cards is
@@ -79,6 +79,48 @@ function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
 let pvpInstanceCounter = 0;
 
+// Module-level cache: one <video> element per blockId, survives NoteCard
+// unmount/remount cycles (e.g. viewport culling during canvas pan). Without
+// this, panning away and back creates a fresh element with no buffered data —
+// the next play() call hits a blank frame and produces the visible saccade.
+const videoElementCache = new Map<string, HTMLVideoElement>();
+
+// Tracks which blockIds have had their audio pipeline initialized. Once
+// pre-warmed we never call v.muted=true again — the expensive Chrome audio
+// subsystem init is paid once at tap time (start of open animation) instead
+// of at animation end when the stall is perceptible.
+const audioPrewarmed = new Set<string>();
+
+function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
+  let v = videoElementCache.get(blockId);
+  if (!v) {
+    v = document.createElement("video");
+    v.autoplay = true;
+    v.loop = true;
+    v.playsInline = true;
+    v.muted = true;
+    v.preload = "auto";
+    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block";
+    videoElementCache.set(blockId, v);
+  }
+  return v;
+}
+
+/**
+ * Call this synchronously inside a tap/click handler before opening a video
+ * card. Runs `v.muted=false` while Chrome is still processing the gesture,
+ * so the audio pipeline init stall is absorbed into the event handler and
+ * never lands on an animation frame.
+ */
+export function prewarmAudio(blockId: string) {
+  if (audioPrewarmed.has(blockId)) return;
+  const v = videoElementCache.get(blockId);
+  if (!v) return;
+  audioPrewarmed.add(blockId);
+  v.volume = 0.001;
+  v.muted = false;
+}
+
 function PersistentVideoPlayerImpl({
   blockId, videoBlob, posterDataUrl,
   canvasRect, openRect, openProgress, editorScrollY,
@@ -86,7 +128,10 @@ function PersistentVideoPlayerImpl({
   transformTransition = false, showPoster = false, portalToBody = false,
   animateLeftTop = false, isSelected = false, children,
 }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  // Stable video element from the module-level cache — survives both React
+  // re-renders and NoteCard unmount/remount (viewport culling on pan).
+  const videoRef = useRef<HTMLVideoElement>(getOrCreateVideoElement(blockId));
+  const innerRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
   const instanceIdRef = useRef<number>(0);
@@ -154,9 +199,40 @@ function PersistentVideoPlayerImpl({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    v.muted = !unlocked;
-    v.controls = unlocked;
-  }, [unlocked]);
+    if (audioPrewarmed.has(blockId)) {
+      // Pipeline already initialized by prewarmAudio() at tap time —
+      // just adjust volume. Never touch muted again.
+      v.volume = unlocked ? 1 : 0.001;
+    } else {
+      // Not yet pre-warmed (first-ever open, or prewarmAudio not called).
+      v.muted = !unlocked;
+      if (unlocked) v.volume = 1;
+    }
+  }, [unlocked, blockId]);
+
+  // Set src whenever the objectUrl changes (stable for the same blob, but runs
+  // on first render too since the element was created without a src attribute).
+  useLayoutEffect(() => {
+    const v = videoRef.current;
+    if (v && v.src !== objectUrl) v.src = objectUrl;
+  }, [objectUrl]);
+
+  // Sync showPoster → display style directly so React never touches the element.
+  useLayoutEffect(() => {
+    const v = videoRef.current;
+    if (v) v.style.display = showPoster ? "none" : "block";
+  }, [showPoster]);
+
+  // After every render, move the stable video element into the current inner div.
+  // appendChild is a no-op if already the last child; if the portal container
+  // just changed, this re-parents the element before the browser paints —
+  // preserving playback state with no visible stutter.
+  useLayoutEffect(() => {
+    const inner = innerRef.current;
+    const v = videoRef.current;
+    if (!inner || !v) return;
+    if (inner.lastChild !== v) inner.appendChild(v);
+  });
 
   const [localSelected, setLocalSelected] = useState(false);
   useEffect(() => {
@@ -182,18 +258,76 @@ function PersistentVideoPlayerImpl({
     return () => window.removeEventListener("keydown", onKey, true);
   }, [localSelected]);
 
+  const hoverFillRef = useRef<HTMLDivElement>(null);
   const progressFillRef = useRef<HTMLDivElement>(null);
+  const seekBarRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [userMuted, setUserMuted] = useState(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const [controlsVisible, setControlsVisible] = useState(true);
+
+  const showControls = useCallback(() => {
+    setControlsVisible(true);
+    clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 2500);
+  }, []);
+
+  useEffect(() => {
+    if (!unlocked) { clearTimeout(hideTimerRef.current); setControlsVisible(true); return; }
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 2500);
+    return () => clearTimeout(hideTimerRef.current);
+  }, [unlocked]);
+
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const onTimeUpdate = () => {
-      const fill = progressFillRef.current;
-      if (!fill || v.duration <= 0) return;
-      fill.style.transform = `scaleX(${v.currentTime / v.duration})`;
+    let rafId = 0;
+    const tick = () => {
+      rafId = requestAnimationFrame(tick);
+      const ratio = v.duration > 0 ? v.currentTime / v.duration : 0;
+      if (hoverFillRef.current) hoverFillRef.current.style.transform = `scaleX(${ratio})`;
+      if (progressFillRef.current) progressFillRef.current.style.transform = `scaleX(${ratio})`;
     };
-    v.addEventListener("timeupdate", onTimeUpdate);
-    return () => v.removeEventListener("timeupdate", onTimeUpdate);
+    rafId = requestAnimationFrame(tick);
+    const onPlay = () => setIsPaused(false);
+    const onPause = () => setIsPaused(true);
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    return () => {
+      cancelAnimationFrame(rafId);
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+    };
   }, [portalToBody]);
+
+  const togglePlayPause = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) v.play(); else v.pause();
+    showControls();
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    const next = !userMuted;
+    setUserMuted(next);
+    v.volume = next ? 0.001 : 1;
+    showControls();
+  };
+
+  const onSeekClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    const bar = seekBarRef.current;
+    if (!v || !bar || v.duration <= 0) return;
+    const rect = bar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    v.currentTime = ratio * v.duration;
+    showControls();
+  };
 
   // Wheel forwarding — during open (pointerEvents:"auto") the video element
   // catches wheel events that would otherwise scroll the editor overlay. We
@@ -233,8 +367,6 @@ function PersistentVideoPlayerImpl({
       transform: `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`,
       transformOrigin: isDragMode ? "top center" : "center",
       willChange: "transform",
-      // Explicitly cleared so a left/top transition carried over from rest
-      // mode doesn't fire when `left`/`top` reset to 0 on mode switch.
       transition: "none",
     };
   } else {
@@ -271,8 +403,11 @@ function PersistentVideoPlayerImpl({
       }}
     >
       {/* Inner div: hover scale only, on its own stable GPU layer so the
-          video compositor stays on the color-managed path across all states. */}
+          video compositor stays on the color-managed path across all states.
+          The <video> element is appended here imperatively by useLayoutEffect
+          so it survives portal container changes without recreation. */}
       <div
+        ref={innerRef}
         style={{
           width: "100%",
           height: "100%",
@@ -298,30 +433,9 @@ function PersistentVideoPlayerImpl({
             pointerEvents: "none",
           }}
         />
-        {/* Video stays mounted so the ref remains live (and state like
-            currentTime persists). During close we hide it with display:none
-            and `playing=false` pauses it — the poster img behind is all the
-            user sees. */}
-        <video
-          ref={videoRef}
-          src={objectUrl}
-          autoPlay
-          loop
-          playsInline
-          muted
-          preload="auto"
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            display: showPoster ? "none" : "block",
-          }}
-        />
+        {/* <video> is injected imperatively via useLayoutEffect — see above */}
       </div>
-      {/* Progress bar — sibling of the inner div so it lives on a separate
-          layer and never perturbs the video's GPU compositor path. */}
+      {/* Hover progress bar — canvas rest only */}
       <div
         style={{
           position: "absolute",
@@ -336,11 +450,9 @@ function PersistentVideoPlayerImpl({
           transition: "opacity 300ms ease-out",
         }}
       >
-        {/* Track */}
         <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.25)", borderRadius: 9999 }} />
-        {/* Fill */}
         <div
-          ref={progressFillRef}
+          ref={hoverFillRef}
           style={{
             position: "absolute",
             inset: 0,
@@ -351,6 +463,83 @@ function PersistentVideoPlayerImpl({
             borderRadius: 9999,
           }}
         />
+      </div>
+      {/* Custom controls overlay — open state only. Sibling of innerRef so it
+          never touches the video GPU compositor layer. */}
+      <div
+        onMouseMove={showControls}
+        style={{
+          position: "absolute",
+          inset: 0,
+          borderRadius: radius,
+          overflow: "hidden",
+          opacity: unlocked && controlsVisible ? 1 : 0,
+          transition: "opacity 300ms ease-out",
+          pointerEvents: unlocked ? "auto" : "none",
+        }}
+      >
+        {/* Gradient scrim */}
+        <div style={{
+          position: "absolute",
+          bottom: 0, left: 0, right: 0,
+          height: 80,
+          background: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 100%)",
+          pointerEvents: "none",
+        }} />
+        {/* Controls bar */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0, left: 0, right: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "8px 12px",
+          }}
+        >
+          {/* Play/Pause */}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={togglePlayPause}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#fff", display: "flex", alignItems: "center", flexShrink: 0 }}
+          >
+            {isPaused ? <Play size={18} fill="#fff" /> : <Pause size={18} fill="#fff" />}
+          </button>
+          {/* Seek bar */}
+          <div
+            ref={seekBarRef}
+            onPointerDown={e => e.stopPropagation()}
+            onClick={onSeekClick}
+            style={{
+              flex: 1,
+              height: 4,
+              borderRadius: 9999,
+              background: "rgba(255,255,255,0.3)",
+              cursor: "pointer",
+              position: "relative",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              ref={progressFillRef}
+              style={{
+                position: "absolute",
+                inset: 0,
+                background: "#fff",
+                transformOrigin: "left",
+                transform: "scaleX(0)",
+              }}
+            />
+          </div>
+          {/* Mute/Unmute */}
+          <button
+            onPointerDown={e => e.stopPropagation()}
+            onClick={toggleMute}
+            style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#fff", display: "flex", alignItems: "center", flexShrink: 0 }}
+          >
+            {userMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          </button>
+        </div>
       </div>
       {/* Selection ring — sibling of inner div, outside the clip. Matches
           the same box-shadow style as images and non-header video blocks. */}
