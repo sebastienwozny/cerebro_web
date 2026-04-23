@@ -584,6 +584,7 @@ function NoteCard({
             rotationDeg={0}
             isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
             transformTransition={t === 0 && !isDragging && !isFollowing && !isResizing}
+            isDeleting={isDeleting}
             showPoster={false}
           >
             {cornerOverlay}

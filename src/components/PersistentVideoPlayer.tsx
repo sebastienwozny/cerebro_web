@@ -34,6 +34,8 @@ interface Props {
   pointerEvents: "auto" | "none";
   /** Card tilt (degrees) during drag. Fades out as the card opens. */
   rotationDeg?: number;
+  /** Mirror the card's delete animation (scale to 0). */
+  isDeleting?: boolean;
   /** Whether the card is being hovered at rest — applies a 1.02 scale to match the card. */
   isHovered?: boolean;
   /** True when the transform is stable frame-to-frame (no drag/resize/open-anim).
@@ -126,7 +128,7 @@ function PersistentVideoPlayerImpl({
   canvasRect, openRect, openProgress, editorScrollY,
   playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
   transformTransition = false, showPoster = false, portalToBody = false,
-  animateLeftTop = false, isSelected = false, children,
+  animateLeftTop = false, isSelected = false, isDeleting = false, children,
 }: Props) {
   // Stable video element from the module-level cache — survives both React
   // re-renders and NoteCard unmount/remount (viewport culling on pan).
@@ -436,6 +438,8 @@ function PersistentVideoPlayerImpl({
         zIndex,
         pointerEvents,
         borderRadius: radius,
+        transform: isDeleting ? "scale(0)" : (outerPositionStyle.transform ?? "none"),
+        transition: isDeleting ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)" : (outerPositionStyle.transition ?? "none"),
       }}
     >
       {/* Inner div: hover scale only, on its own stable GPU layer so the
