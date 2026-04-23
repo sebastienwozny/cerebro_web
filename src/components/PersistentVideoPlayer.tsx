@@ -329,6 +329,22 @@ function PersistentVideoPlayerImpl({
     showControls();
   };
 
+  // Keep openRect current for the scroll handler without re-creating it.
+  const openRectRef = useRef(openRect);
+  openRectRef.current = openRect;
+
+  // Tracks the current editor scroll offset. Kept in a ref (not state) so
+  // updates never trigger a React re-render — the imperative DOM update below
+  // is the only thing that needs to fire on scroll.
+  const scrollOffsetRef = useRef(0);
+
+  // Seed scroll offset once when the card opens (used for the absolute top calculation).
+  useLayoutEffect(() => {
+    if (!unlocked) { scrollOffsetRef.current = 0; return; }
+    const overlay = document.querySelector("[data-editor-overlay]") as HTMLElement | null;
+    scrollOffsetRef.current = overlay?.scrollTop ?? 0;
+  }, [unlocked]);
+
   // Wheel forwarding — during open (pointerEvents:"auto") the video element
   // catches wheel events that would otherwise scroll the editor overlay. We
   // find the scroll container and apply the deltaY manually.
@@ -347,28 +363,42 @@ function PersistentVideoPlayerImpl({
   const height = lerp(canvasRect.height, openRect.height, t);
   const radius = lerp(canvasRect.borderRadius, openRect.borderRadius, t);
 
+  // When fully open (unlocked), the portal target switches to [data-editor-overlay]
+  // so position:absolute tracks scroll natively — no JS, no lag.
+  const portalTarget: Element = (() => {
+    if (!portalToBody) return document.getElementById("pvp-portal-root") ?? document.body;
+    if (unlocked) return document.querySelector("[data-editor-overlay]") ?? document.body;
+    return document.body;
+  })();
+
   let outerPositionStyle: React.CSSProperties;
   if (portalToBody) {
-    const x = lerp(canvasRect.left, openRect.left, t);
-    // Editor-scroll offset only applies at t=1 (fully open); during the
-    // opening animation the openRect is the landing target in viewport coords.
-    const y = lerp(canvasRect.top, openRect.top - editorScrollY * t, t);
-    const rot = rotationDeg * (1 - t);
-    const isDragMode = Math.abs(rot) > 0.001;
-    // Rotation goes on the OUTER layer (alongside translate3d). Chrome's video
-    // compositor picks its color-managed "dark" path only when the direct
-    // ancestor layer of the <video> has a stable scale-only transform — adding
-    // a rotate there pushes it onto the "light" path. Keeping rotation up on
-    // the outer layer preserves the dark rendering during drag.
-    outerPositionStyle = {
-      position: "fixed",
-      top: 0,
-      left: 0,
-      transform: `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`,
-      transformOrigin: isDragMode ? "top center" : "center",
-      willChange: "transform",
-      transition: "none",
-    };
+    if (unlocked) {
+      // Fully open: absolute inside the scroll container. top/left are in
+      // document-space (viewport + scrollTop), so the element scrolls with
+      // the content natively with zero JS involvement.
+      outerPositionStyle = {
+        position: "absolute",
+        top: openRect.top + scrollOffsetRef.current,
+        left: openRect.left,
+        willChange: "transform",
+        transform: "translateZ(0)",
+      };
+    } else {
+      const x = lerp(canvasRect.left, openRect.left, t);
+      const y = lerp(canvasRect.top, openRect.top, t);
+      const rot = rotationDeg * (1 - t);
+      const isDragMode = Math.abs(rot) > 0.001;
+      outerPositionStyle = {
+        position: "fixed",
+        top: 0,
+        left: 0,
+        transform: `translate3d(${x}px, ${y}px, 0)${isDragMode ? ` rotate(${rot}deg)` : ""}`,
+        transformOrigin: isDragMode ? "top center" : "center",
+        willChange: "transform",
+        transition: "none",
+      };
+    }
   } else {
     // Rest / canvas-space mode. Positioned via left/top inside pvp-portal-root
     // which lives in the scaled canvas layer, so pan/zoom are handled by the
@@ -564,9 +594,7 @@ function PersistentVideoPlayerImpl({
           Rendered by NoteCard, positioned absolute against the outer div. */}
       {children}
     </div>,
-    portalToBody
-      ? document.body
-      : (document.getElementById("pvp-portal-root") ?? document.body),
+    portalTarget,
   );
 }
 

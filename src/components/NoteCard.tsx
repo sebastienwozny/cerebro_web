@@ -201,19 +201,9 @@ function NoteCard({
     }
   }, [hoverSuppressed, isShadowInstance, note.id]);
 
-  // Track editor scroll position so the portal-rendered PersistentVideoPlayer
-  // scrolls with the note body instead of acting like a sticky header.
-  // Shadow instances don't render the editor overlay themselves, so they fall
-  // back to a DOM query to subscribe to the open card's scroll container.
-  const [editorScrollY, setEditorScrollY] = useState(0);
-  useEffect(() => {
-    const el = scrollRef.current ?? (document.querySelector("[data-editor-overlay]") as HTMLDivElement | null);
-    if (!el) { setEditorScrollY(0); return; }
-    const onScroll = () => setEditorScrollY(el.scrollTop);
-    onScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, [openProgress >= 1, isShadowInstance]);
+  // editorScrollY is managed imperatively inside PersistentVideoPlayer via a
+  // ref + direct DOM update on scroll — keeping it in React state caused
+  // async re-renders that fought the imperative update and produced lag.
 
   const canvasLeft = note.positionX - cardW / 2 + groupDragDelta.dx;
   const canvasTop = note.positionY - cardH / 2 + groupDragDelta.dy;
@@ -583,7 +573,7 @@ function NoteCard({
             canvasRect={canvasRect}
             openRect={openRect}
             openProgress={t}
-            editorScrollY={editorScrollY}
+            editorScrollY={0}
             playing={playing}
             unlocked={unlocked}
             zIndex="var(--z-editor-controls)"
