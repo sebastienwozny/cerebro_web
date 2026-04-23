@@ -79,8 +79,6 @@ interface Props {
  */
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
-let pvpInstanceCounter = 0;
-
 // Module-level cache: one <video> element per blockId, survives NoteCard
 // unmount/remount cycles (e.g. viewport culling during canvas pan). Without
 // this, panning away and back creates a fresh element with no buffered data —
@@ -136,65 +134,15 @@ function PersistentVideoPlayerImpl({
   const innerRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const objectUrl = getVideoUrl(blockId, videoBlob);
-  const instanceIdRef = useRef<number>(0);
-  if (instanceIdRef.current === 0) {
-    pvpInstanceCounter += 1;
-    instanceIdRef.current = pvpInstanceCounter;
-  }
-  const iid = instanceIdRef.current;
-
-  // Mount / unmount tracking
-  useEffect(() => {
-    console.log("[PVP MOUNT]", { iid, blockId, initialPlaying: playing, showPoster });
-    return () => {
-      const v = videoRef.current;
-      console.log("[PVP UNMOUNT]", { iid, blockId, currentTime: v?.currentTime, paused: v?.paused });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Attach native <video> event listeners so we can see what the element is
-  // actually doing regardless of React state.
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    const log = (ev: string) => () => console.log(`[PVP video.${ev}]`, { iid, blockId, paused: v.paused, currentTime: v.currentTime, readyState: v.readyState });
-    const handlers = {
-      play: log("play"),
-      pause: log("pause"),
-      playing: log("playing"),
-      ended: log("ended"),
-      waiting: log("waiting"),
-      loadedmetadata: log("loadedmetadata"),
-      canplay: log("canplay"),
-    };
-    for (const [ev, h] of Object.entries(handlers)) v.addEventListener(ev, h);
-    return () => {
-      for (const [ev, h] of Object.entries(handlers)) v.removeEventListener(ev, h);
-    };
-  }, [blockId, iid]);
 
   useEffect(() => {
     const v = videoRef.current;
-    const videoCount = document.querySelectorAll("video").length;
-    console.log("[PVP] playing effect ENTER", { iid, blockId, playing, showPoster, videoExists: !!v, paused: v?.paused, currentTime: v?.currentTime, videoCountInDOM: videoCount });
     if (!v) return;
     if (playing) {
-      v.play().then(() => {
-        console.log("[PVP] play() resolved", { iid, blockId, paused: v.paused, currentTime: v.currentTime });
-      }).catch((err) => {
-        console.log("[PVP] play() rejected", { iid, blockId, err: err?.message });
-      });
+      v.play().catch(() => {});
     } else {
       v.pause();
-      // Seek to 0 so the next reveal (next hover or reopened card) starts on
-      // the exact poster frame — fixes the brightness mismatch where the
-      // video resumed at a middle frame different from the poster.
       try { v.currentTime = 0; } catch { /* pre-metadata — browser will clamp */ }
-      console.log("[PVP] pause()+seek0", { iid, blockId, paused: v.paused, currentTime: v.currentTime });
-      requestAnimationFrame(() => {
-        console.log("[PVP] post-pause rAF check", { iid, blockId, paused: v.paused, currentTime: v.currentTime });
-      });
     }
   }, [playing]);
 

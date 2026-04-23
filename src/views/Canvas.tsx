@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNotes } from "../store/useNotes";
 import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
@@ -657,15 +658,19 @@ export default function Canvas() {
         />
       )}
 
-      {/* White overlay */}
-      {openProgress > 0 && (
+      {/* Backdrop portaled to document.body — bypasses all canvas stacking
+          contexts and reliably covers pvp-portal-root (z:9997) at z:9998. */}
+      {openProgress > 0 && createPortal(
         <div
-          className="absolute inset-0 pointer-events-none bg-card-open z-(--z-card-overlay)"
-          style={{ opacity: openProgress }}
-        />
+          className="fixed inset-0 pointer-events-none bg-card-open"
+          style={{ opacity: openProgress, zIndex: 9998 }}
+        />,
+        document.body
       )}
 
-      {/* Canvas layer */}
+      {/* Canvas layer — transform creates a stacking context that traps all
+          internal z-indices (cards, PVPs) below the backdrop (z:9998) and
+          opening card (z:9999) in the root stacking context. */}
       <div
         ref={layerRef}
         className="absolute origin-top-left"
@@ -755,25 +760,28 @@ export default function Canvas() {
         })}
       </div>
 
-      {/* Persistent video portal root — OUTSIDE the canvas layer so it is not
-          inside the layer's scale() transform. The scale() creates a new
-          compositor stacking context; when PVPs switch from this root to
-          document.body on open, Chrome re-composites the video texture (different
-          color path) causing the visible saccade. By keeping this root outside
-          the scaled layer both portal targets share the same compositor context.
-          Transform is mirrored from the canvas layer via applyTransform (direct
-          DOM, no React re-renders) so pan/zoom still has zero lag. */}
-      <div
-        id="pvp-portal-root"
-        style={{
-          position: "fixed",
-          left: windowSize.w / 2,
-          top: windowSize.h / 2,
-          transformOrigin: "top left",
-          pointerEvents: "none",
-          zIndex: 9997,
-        }}
-      />
+      {/* PVP portal root — in document.body so the canvas transform sync can
+          position it identically to the canvas layer. backdrop-filter: blur(0)
+          forces Chrome's compositor to composite this element normally (it must
+          sample what's behind the element), which prevents video hardware
+          overlay planes from bypassing CSS z-index. blur(0) is visually a no-op
+          and does NOT affect the videos' own color rendering (backdrop-filter
+          applies to the BACKDROP, not the element's own pixels). */}
+      {createPortal(
+        <div
+          id="pvp-portal-root"
+          style={{
+            position: "fixed",
+            left: windowSize.w / 2,
+            top: windowSize.h / 2,
+            transformOrigin: "top left",
+            pointerEvents: "none",
+            zIndex: 9997,
+            backdropFilter: "blur(0px)",
+          }}
+        />,
+        document.body
+      )}
 
       {/* Opening/open card */}
       {openNoteId && openProgress > 0 && notes.filter(n => n.id === openNoteId).map((note) => (

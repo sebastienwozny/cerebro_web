@@ -17,7 +17,6 @@ export function useOpenClose(
 
   const openNote = useCallback(
     (id: string) => {
-      console.log("[useOpenClose] openNote", { id });
       bringToFront(id);
       setOpenTransform({ ...getTransform() });
       setOpenNoteId(id);
@@ -40,7 +39,6 @@ export function useOpenClose(
   );
 
   const closeNote = useCallback(() => {
-    console.log("[useOpenClose] closeNote called -> setIsClosing(true)");
     const scrollEl = document.querySelector("[data-editor-overlay]") as HTMLElement | null;
     setClosingScrollOffset(scrollEl?.scrollTop ?? 0);
     setIsClosing(true);
@@ -51,7 +49,6 @@ export function useOpenClose(
       ease: "power3.out",
       onUpdate: () => setOpenProgress(progressRef.current.value),
       onComplete: () => {
-        console.log("[useOpenClose] close onComplete -> clearing openNoteId, openProgress=0");
         progressRef.current.value = 0;
         setOpenProgress(0);
         setOpenNoteId(null);

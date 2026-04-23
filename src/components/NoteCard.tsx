@@ -195,11 +195,8 @@ function NoteCard({
   // even if the user's pointer is no longer on the card. Reset whenever
   // hover is suppressed so the card requires a fresh pointer-enter.
   useEffect(() => {
-    if (hoverSuppressed || isShadowInstance) {
-      console.log("[NoteCard] reset cursorInside (hoverSuppressed or shadow)", { noteId: note.id, hoverSuppressed, isShadowInstance });
-      setCursorInside(false);
-    }
-  }, [hoverSuppressed, isShadowInstance, note.id]);
+    if (hoverSuppressed || isShadowInstance) setCursorInside(false);
+  }, [hoverSuppressed, isShadowInstance]);
 
   // editorScrollY is managed imperatively inside PersistentVideoPlayer via a
   // ref + direct DOM update on scroll — keeping it in React state caused
@@ -265,7 +262,7 @@ function NoteCard({
           top: visualTop,
           width: visualWidth,
           height: t > 0 ? visualHeight : cardH,
-          zIndex: openProgress > 0 ? "var(--z-card-open)" : note.zOrder,
+          zIndex: openProgress > 0 && !isShadowInstance ? "var(--z-card-open)" : note.zOrder,
           transform: isDeleting
             ? "scale(0)"
             : isDragging
@@ -307,8 +304,8 @@ function NoteCard({
         }}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        onPointerEnter={() => { if (!isDragging && !isResizing) { console.log("[NoteCard] pointerEnter -> cursorInside=true", { noteId: note.id, isShadowInstance }); setCursorInside(true); } }}
-        onPointerLeave={(e) => { if (!isDragging && !isResizing) { const r = cardRef.current?.getBoundingClientRect(); if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return; console.log("[NoteCard] pointerLeave -> cursorInside=false", { noteId: note.id, isShadowInstance }); setCursorInside(false); } }}
+        onPointerEnter={() => { if (!isDragging && !isResizing) setCursorInside(true); }}
+        onPointerLeave={(e) => { if (!isDragging && !isResizing) { const r = cardRef.current?.getBoundingClientRect(); if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return; setCursorInside(false); } }}
       >
         {/* Clipped card content */}
         <div
