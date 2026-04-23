@@ -247,6 +247,17 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         .insertContent({ type: "image", attrs: { src: dataUrl, aspect } })
         .run();
     }
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!editor) return;
+      const { $from } = editor.state.selection;
+      const depth = $from.depth > 0 ? $from.depth : 1;
+      const blockPos = $from.before(depth);
+      const domNode = editor.view.nodeDOM(blockPos) as HTMLElement | null;
+      if (domNode && domNode.isConnected) {
+        hoveredBlockRef.current = domNode;
+        computeFromBlockRef.current?.(domNode);
+      }
+    }));
   }
 
   async function insertVideoFromFile(file: File) {
@@ -281,6 +292,20 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         .insertContent({ type: "video", attrs })
         .run();
     }
+
+    // After insertion the layout shifts and hoveredBlockRef is null (cleared
+    // by resetHandles when the plus menu closed). Find the block via cursor.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (!editor) return;
+      const { $from } = editor.state.selection;
+      const depth = $from.depth > 0 ? $from.depth : 1;
+      const blockPos = $from.before(depth);
+      const domNode = editor.view.nodeDOM(blockPos) as HTMLElement | null;
+      if (domNode && domNode.isConnected) {
+        hoveredBlockRef.current = domNode;
+        computeFromBlockRef.current?.(domNode);
+      }
+    }));
   }
 
   useEffect(() => {
