@@ -392,7 +392,13 @@ function PersistentVideoPlayerImpl({
     <div
       ref={outerRef}
       onWheel={onWheel}
-      onClick={() => { if (unlocked) setLocalSelected(true); }}
+      onClick={(e) => {
+        if (!unlocked) return;
+        setLocalSelected(true);
+        const v = videoRef.current;
+        if (v) { if (v.paused) v.play(); else v.pause(); }
+        showControls();
+      }}
       style={{
         ...outerPositionStyle,
         width,
