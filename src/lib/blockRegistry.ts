@@ -105,14 +105,14 @@ export const BLOCK_DEFS: BlockDef[] = [
     type: "image",
     label: "Image",
     icon: ImageIcon,
-    slashShortcut: "/image",
+    slashShortcut: "",
     apply: null,
   },
   {
     type: "video",
     label: "Video",
     icon: Film,
-    slashShortcut: "/video",
+    slashShortcut: "",
     apply: null,
   },
 ];

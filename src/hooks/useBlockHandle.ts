@@ -32,6 +32,8 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
   const plusBtnRef = useRef<HTMLButtonElement>(null);
   const hoveredBlockRef = useRef<HTMLElement | null>(null);
   const computeFromBlockRef = useRef<((found: HTMLElement) => void) | null>(null);
+  const showPlusMenuRef = useRef(showPlusMenu);
+  showPlusMenuRef.current = showPlusMenu;
 
   // Main positioning — mirrors tiptap-extension-global-drag-handle's
   // detection + positioning logic so the two handles stay aligned.
@@ -97,7 +99,13 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
 
     computeFromBlockRef.current = (found: HTMLElement) => {
       const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
+      // Skip React state update while the menu is open — the imperative DOM
+      // update below is synchronous and sufficient. setHandlePos while scrolling
+      // causes an async re-render that re-applies a slightly stale position,
+      // fighting the imperative update and producing the visible inertia effect.
+      if (!showPlusMenu) {
+        setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
+      }
       syncDragHandle(dragLeft, top);
       syncPlusButton(plusLeft, top);
       const menu = plusMenuRef.current;
@@ -189,6 +197,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
   // any ancestor scrolls or the viewport resizes.
   useEffect(() => {
     const update = () => {
+      if (showPlusMenuRef.current) return;
       const block = hoveredBlockRef.current;
       if (!block || !block.isConnected) return;
       computeFromBlockRef.current?.(block);

@@ -26,7 +26,7 @@ const PlusMenu = forwardRef<HTMLDivElement, Props>(
     return (
     <div
       ref={ref}
-      className="floating-menu-dropdown fixed flex flex-col py-1 backdrop-blur-xl rounded-xl z-(--z-plus-menu) min-w-[300px]"
+      className="floating-menu-dropdown absolute flex flex-col py-1 backdrop-blur-xl rounded-xl z-(--z-plus-menu) min-w-[300px]"
       style={{
         left: contentLeft,
         top: lineBottom + 8,

@@ -55,6 +55,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const [hasSelection, setHasSelection] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [menuFlipUp, setMenuFlipUp] = useState(false);
+  const [frozenMenuPos, setFrozenMenuPos] = useState<{ contentLeft: number; lineBottom: number; lineH: number } | null>(null);
+  const menuPosFrozen = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const plusIdxRef = useRef(0);
 
@@ -201,6 +203,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           return true;
         }
         if (event.key === "/" && !showPlusMenu) {
+          const { $from } = editor.state.selection;
+          if ($from.parentOffset !== 0) return false;
           // Open the plus menu after the "/" is inserted, then delete it
           setTimeout(() => {
             if (!editor) return;
@@ -412,15 +416,24 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     editorWrapRef, plusBtnRef, hoveredBlockRef, computeFromBlockRef,
   } = useBlockHandle({ editor, editable, showPlusMenu, hasSelection, plusMenuRef });
 
-  // Flip menu above the line when it would overflow the viewport bottom.
+  // Freeze position + flip direction once when menu opens.
   useLayoutEffect(() => {
-    if (!showPlusMenu || !handlePos) return;
+    if (!showPlusMenu) { menuPosFrozen.current = false; setFrozenMenuPos(null); return; }
+    if (!handlePos || menuPosFrozen.current) return;
     const el = plusMenuRef.current;
     if (!el) return;
+    const overlay = editor?.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+    const scrollTop = overlay?.scrollTop ?? 0;
     const h = el.offsetHeight;
     const viewportH = window.innerHeight;
     setMenuFlipUp(handlePos.lineBottom + 8 + h > viewportH - 8);
-  }, [showPlusMenu, handlePos]);
+    setFrozenMenuPos({
+      contentLeft: handlePos.contentLeft,
+      lineBottom: handlePos.lineBottom + scrollTop,
+      lineH: handlePos.lineH,
+    });
+    menuPosFrozen.current = true;
+  }, [showPlusMenu, handlePos, editor]);
 
   const highlightPlusItem = useCallback(() => {
     const menu = plusMenuRef.current;
@@ -630,24 +643,30 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         </button>
       )}
 
-      {/* Plus menu dropdown — portaled so it escapes NoteCard's stacking
-          context (z-9999) and sits above every other UI layer. */}
-      {editable && showPlusMenu && handlePos && createPortal(
-        <PlusMenu
-          ref={plusMenuRef}
-          contentLeft={handlePos.contentLeft}
-          lineBottom={handlePos.lineBottom}
-          lineH={handlePos.lineH}
-          flipUp={menuFlipUp}
-          onSelect={handlePlusSelect}
-          onClose={() => setShowPlusMenu(false)}
-          onHoverItem={(i) => {
-            plusIdxRef.current = i;
-            highlightPlusItem();
-          }}
-        />,
-        document.body,
-      )}
+      {/* Plus menu — portaled into the editor scroll container so it uses
+          position:absolute in document-space. The browser then handles scroll
+          tracking natively with zero JS lag. */}
+      {editable && showPlusMenu && handlePos && (() => {
+        const overlay = editor?.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+        if (!overlay) return null;
+        const pos = frozenMenuPos ?? { contentLeft: handlePos.contentLeft, lineBottom: handlePos.lineBottom + overlay.scrollTop, lineH: handlePos.lineH };
+        return createPortal(
+          <PlusMenu
+            ref={plusMenuRef}
+            contentLeft={pos.contentLeft}
+            lineBottom={pos.lineBottom}
+            lineH={pos.lineH}
+            flipUp={menuFlipUp}
+            onSelect={handlePlusSelect}
+            onClose={() => setShowPlusMenu(false)}
+            onHoverItem={(i) => {
+              plusIdxRef.current = i;
+              highlightPlusItem();
+            }}
+          />,
+          overlay,
+        );
+      })()}
     </div>
   );
 }
