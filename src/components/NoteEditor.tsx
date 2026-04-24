@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from "@tiptap/react";
+import { Extension } from "@tiptap/core";
 import { DOMParser } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
@@ -99,6 +100,25 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       }),
       AutoJoiner.configure({
         elementsToJoin: ["bulletList", "orderedList", "taskList"],
+      }),
+      // Prevent undoInputRule from reverting a divider back to "---" when the
+      // user presses Backspace on the empty paragraph that follows it. We just
+      // delete that empty paragraph instead.
+      Extension.create({
+        name: "hrBackspaceFix",
+        addKeyboardShortcuts() {
+          return {
+            Backspace: () => {
+              const { state } = this.editor;
+              const { $anchor, empty } = state.selection;
+              if (!empty || $anchor.parentOffset !== 0) return false;
+              if ($anchor.parent.type.name !== "paragraph" || $anchor.parent.childCount !== 0) return false;
+              const $beforePara = state.doc.resolve($anchor.before());
+              if ($beforePara.nodeBefore?.type.name !== "horizontalRule") return false;
+              return this.editor.commands.deleteCurrentNode();
+            },
+          };
+        },
       }),
     ],
     content: initialHtml.current,
