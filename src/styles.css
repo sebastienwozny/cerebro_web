@@ -626,6 +626,13 @@ html, body, #root {
 
 
 /* ── Block handles (drag + plus) — shared styling ── */
+/* Single class on the parent hides both handles instantly and simultaneously —
+   no per-element timing, no transition lag. */
+.note-editor.handles-hidden .drag-handle {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: none !important;
+}
 .drag-handle {
   width: 24px;
   height: 24px;

@@ -98,6 +98,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
     };
 
     computeFromBlockRef.current = (found: HTMLElement) => {
+      editorWrapRef.current?.classList.remove("handles-hidden");
       const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
       // Skip React state update while the menu is open — the imperative DOM
       // update below is synchronous and sufficient. setHandlePos while scrolling
@@ -144,6 +145,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
       if (!found) return;
 
       hoveredBlockRef.current = found;
+      editorWrapRef.current?.classList.remove("handles-hidden");
       const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
       setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
@@ -172,6 +174,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
       if (!found) return;
 
       hoveredBlockRef.current = found;
+      editorWrapRef.current?.classList.remove("handles-hidden");
       const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
       setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
@@ -193,20 +196,28 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
     };
   }, [editor, editable, showPlusMenu, hasSelection, plusMenuRef]);
 
-  // Keep the handles (and menu when open) anchored to the hovered block when
-  // any ancestor scrolls or the viewport resizes.
+  // Hide handles while scrolling. The browser GPU-composites the scroll before
+  // the JS event fires, so any position update lags behind and looks like
+  // inertia. Hiding on scroll and clearing state means handles only reappear
+  // on the next mousemove — no lag, standard editor UX.
   useEffect(() => {
-    const update = () => {
+    const onScroll = () => {
+      if (showPlusMenuRef.current) return;
+      editorWrapRef.current?.classList.add("handles-hidden");
+      setHandlePos(null);
+      hoveredBlockRef.current = null;
+    };
+    const onResize = () => {
       if (showPlusMenuRef.current) return;
       const block = hoveredBlockRef.current;
       if (!block || !block.isConnected) return;
       computeFromBlockRef.current?.(block);
     };
-    window.addEventListener("scroll", update, true);
-    window.addEventListener("resize", update);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
     return () => {
-      window.removeEventListener("scroll", update, true);
-      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
     };
   }, []);
 
