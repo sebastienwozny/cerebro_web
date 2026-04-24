@@ -2,6 +2,7 @@ import { forwardRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, Eraser, Link2, ExternalLink, Unlink, Check } from "lucide-react";
 import ToolbarButton from "./ToolbarButton";
+import TurnIntoButton from "./TurnIntoButton";
 
 interface Props {
   editor: Editor | null;
@@ -75,6 +76,13 @@ const FormatToolbar = forwardRef<HTMLInputElement, Props>(
         <div
           className={`floating-menu-bar fixed left-1/2 -translate-x-1/2 flex items-center gap-1 p-1.5 backdrop-blur-xl rounded-xl transition-all duration-300 z-(--z-toolbar) ${formatTransitionClass}`}
         >
+          <TurnIntoButton
+            editor={editor}
+            visible={showFormat}
+            tooltipsEnabled={formatTooltips}
+            onSetTooltipsEnabled={onSetFormatTooltips}
+          />
+          <div className="w-px h-6 bg-(--floating-divider) mx-1" />
           {formatButtons.map((b, i) => (
             <ToolbarButton
               key={i}
