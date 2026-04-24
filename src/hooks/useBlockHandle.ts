@@ -14,6 +14,7 @@ interface Args {
   editor: Editor | null;
   editable: boolean;
   showPlusMenu: boolean;
+  showBlockMenu: boolean;
   hasSelection: boolean;
   plusMenuRef: RefObject<HTMLDivElement | null>;
 }
@@ -24,7 +25,7 @@ const SELECTORS = "li, p:not(:first-child), pre, blockquote, h1, h2, h3, h4, h5,
 // px to the left of tiptap where handles still react (outside editor bounds)
 const MARGIN_BAND = 120;
 
-export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, plusMenuRef }: Args) {
+export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, hasSelection, plusMenuRef }: Args) {
   const [handlePos, setHandlePos] = useState<HandlePos | null>(null);
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
   const [handleHidden, setHandleHidden] = useState(true);
@@ -34,6 +35,8 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
   const computeFromBlockRef = useRef<((found: HTMLElement) => void) | null>(null);
   const showPlusMenuRef = useRef(showPlusMenu);
   showPlusMenuRef.current = showPlusMenu;
+  const showBlockMenuRef = useRef(showBlockMenu);
+  showBlockMenuRef.current = showBlockMenu;
 
   // Main positioning — mirrors tiptap-extension-global-drag-handle's
   // detection + positioning logic so the two handles stay aligned.
@@ -138,7 +141,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
       }) as HTMLElement | undefined;
 
     const onMove = (e: MouseEvent) => {
-      if (showPlusMenu || hasSelection) return;
+      if (showPlusMenu || showBlockMenu || hasSelection) return;
       const probeX = e.clientX + 50 + DRAG_WIDTH;
       const probeY = e.clientY;
       const found = findBlockAt(probeX, probeY);
@@ -162,7 +165,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
     // of tiptap so hovering in that gutter (outside tiptap) also triggers the
     // handles for the row at cursor y.
     const onMarginMove = (e: MouseEvent) => {
-      if (showPlusMenu || hasSelection) return;
+      if (showPlusMenu || showBlockMenu || hasSelection) return;
       const tiptapRect = tiptap.getBoundingClientRect();
       if (e.clientX >= tiptapRect.left) return; // right of tiptap → onMove handles it
       if (e.clientX < tiptapRect.left - MARGIN_BAND) return;
@@ -194,7 +197,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
       tiptap.removeEventListener("mousemove", onMove);
       window.removeEventListener("mousemove", onMarginMove);
     };
-  }, [editor, editable, showPlusMenu, hasSelection, plusMenuRef]);
+  }, [editor, editable, showPlusMenu, showBlockMenu, hasSelection, plusMenuRef]);
 
   // Hide handles while scrolling. The browser GPU-composites the scroll before
   // the JS event fires, so any position update lags behind and looks like
@@ -202,7 +205,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
   // on the next mousemove — no lag, standard editor UX.
   useEffect(() => {
     const onScroll = () => {
-      if (showPlusMenuRef.current) return;
+      if (showPlusMenuRef.current || showBlockMenuRef.current) return;
       editorWrapRef.current?.classList.add("handles-hidden");
       setHandlePos(null);
       hoveredBlockRef.current = null;
@@ -255,6 +258,11 @@ export function useBlockHandle({ editor, editable, showPlusMenu, hasSelection, p
     if (prevShowPlusRef.current && !showPlusMenu) resetHandles();
     prevShowPlusRef.current = showPlusMenu;
   }, [showPlusMenu, resetHandles]);
+  const prevShowBlockMenuRef = useRef(false);
+  useEffect(() => {
+    if (prevShowBlockMenuRef.current && !showBlockMenu) resetHandles();
+    prevShowBlockMenuRef.current = showBlockMenu;
+  }, [showBlockMenu, resetHandles]);
   const prevHasSelectionRef = useRef(false);
   useEffect(() => {
     if (prevHasSelectionRef.current && !hasSelection) resetHandles();

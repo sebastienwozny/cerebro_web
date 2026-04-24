@@ -1,6 +1,6 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import { Extension } from "@tiptap/core";
-import { DOMParser } from "@tiptap/pm/model";
+import { DOMParser, DOMSerializer } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";
 import { createPortal } from "react-dom";
 import StarterKit from "@tiptap/starter-kit";
@@ -25,6 +25,7 @@ import { getVideoUrl } from "../lib/videoUrlCache";
 import { CodeBlockWithView, ImageWithAspect, VideoBlock } from "../lib/editor/extensions";
 import FormatToolbar from "./FormatToolbar";
 import PlusMenu from "./PlusMenu";
+import BlockMenu from "./BlockMenu";
 
 interface Props {
   blocks: NoteBlock[];
@@ -60,6 +61,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const menuPosFrozen = useRef(false);
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const plusIdxRef = useRef(0);
+
+  const [showBlockMenu, setShowBlockMenu] = useState(false);
+  const [blockMenuPos, setBlockMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const blockMenuBlockPosRef = useRef<number | null>(null);
+  const handleBlockPosRef = useRef<number | null>(null);
 
   // Link-mode handlers are bound to useLinkMode's callbacks below; we refer to
   // them via refs inside useEditor's config so the (once-evaluated) handlers
@@ -459,7 +465,11 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const {
     handlePos, handleBlockPos, handleHidden,
     editorWrapRef, plusBtnRef, hoveredBlockRef, computeFromBlockRef,
-  } = useBlockHandle({ editor, editable, showPlusMenu, hasSelection, plusMenuRef });
+  } = useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, hasSelection, plusMenuRef });
+
+  // Mirror handleBlockPos into a ref so the drag-handle click listener (which
+  // lives in a useEffect closure) always reads the latest value.
+  handleBlockPosRef.current = handleBlockPos;
 
   // Freeze position + flip direction once when menu opens.
   useLayoutEffect(() => {
@@ -489,6 +499,93 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (isActive) (el as HTMLElement).scrollIntoView({ block: "nearest" });
     });
   }, []);
+
+  // ── Block menu (drag-handle click) ──
+
+  // Attach click listener to the extension's drag handle element once it mounts.
+  useEffect(() => {
+    if (!editor || !editable) return;
+    let cancelled = false;
+    let removeListener: (() => void) | null = null;
+    const attach = () => {
+      if (cancelled) return;
+      const parent = editor.view.dom.parentElement;
+      const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
+      if (!dragEl) { requestAnimationFrame(attach); return; }
+      const onClick = (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const rect = dragEl.getBoundingClientRect();
+        blockMenuBlockPosRef.current = handleBlockPosRef.current;
+        setBlockMenuPos({ x: rect.right + 4, y: rect.top });
+        setShowBlockMenu(true);
+      };
+      dragEl.addEventListener("click", onClick);
+      removeListener = () => dragEl.removeEventListener("click", onClick);
+    };
+    attach();
+    return () => { cancelled = true; removeListener?.(); };
+  }, [editor, editable]);
+
+  const handleTurnInto = useCallback((def: BlockDef) => {
+    if (!editor || blockMenuBlockPosRef.current === null) return;
+    editor.chain().focus().setTextSelection(blockMenuBlockPosRef.current).run();
+    def.apply?.(editor);
+  }, [editor]);
+
+  const handleResetFormatting = useCallback(() => {
+    if (!editor || blockMenuBlockPosRef.current === null) return;
+    const { state } = editor;
+    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
+    const from = $pos.start($pos.depth);
+    const to = $pos.end($pos.depth);
+    editor.chain().focus().setTextSelection({ from, to }).setParagraph().unsetAllMarks().setTextSelection(to).run();
+  }, [editor]);
+
+  const handleBlockDuplicate = useCallback(() => {
+    if (!editor || blockMenuBlockPosRef.current === null) return;
+    const { state } = editor;
+    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
+    if ($pos.depth === 0) return;
+    const from = $pos.before(1);
+    const node = state.doc.nodeAt(from);
+    if (!node) return;
+    editor.chain().focus().insertContentAt(from + node.nodeSize, node.toJSON()).run();
+  }, [editor]);
+
+  const handleBlockCopy = useCallback(() => {
+    if (!editor || blockMenuBlockPosRef.current === null) return;
+    const { state } = editor;
+    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
+    if ($pos.depth === 0) return;
+    const node = state.doc.nodeAt($pos.before(1));
+    if (!node) return;
+    const dom = DOMSerializer.fromSchema(editor.schema).serializeNode(node) as HTMLElement;
+    const html = dom.outerHTML;
+    const text = node.textContent;
+    if (typeof ClipboardItem !== "undefined") {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" }),
+      });
+      navigator.clipboard.write([item]).catch(() => {
+        navigator.clipboard.writeText(text).catch(() => {});
+      });
+    } else {
+      navigator.clipboard.writeText(text).catch(() => {});
+    }
+  }, [editor]);
+
+  const handleBlockDelete = useCallback(() => {
+    if (!editor || blockMenuBlockPosRef.current === null) return;
+    const { state } = editor;
+    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
+    if ($pos.depth === 0) return;
+    const from = $pos.before(1);
+    const node = state.doc.nodeAt(from);
+    if (!node) return;
+    editor.chain().focus().deleteRange({ from, to: from + node.nodeSize }).run();
+  }, [editor]);
 
   // Close plus menu on click outside or Escape
   useEffect(() => {
@@ -714,6 +811,19 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           overlay,
         );
       })()}
+
+      {editable && showBlockMenu && (
+        <BlockMenu
+          x={blockMenuPos.x}
+          y={blockMenuPos.y}
+          onTurnInto={handleTurnInto}
+          onResetFormatting={handleResetFormatting}
+          onDuplicate={handleBlockDuplicate}
+          onCopy={handleBlockCopy}
+          onDelete={handleBlockDelete}
+          onClose={() => setShowBlockMenu(false)}
+        />
+      )}
     </div>
   );
 }
