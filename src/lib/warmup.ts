@@ -12,8 +12,10 @@ import Placeholder from "@tiptap/extension-placeholder";
  * and GSAP so the first interactions feel instant.
  */
 export function warmup() {
-  // Run after first paint so we don't block initial render
-  requestIdleCallback(() => {
+  // Run after first paint so we don't block initial render.
+  // Safari doesn't support requestIdleCallback — setTimeout(0) is equivalent enough here.
+  const schedule = typeof requestIdleCallback !== "undefined" ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 0);
+  schedule(() => {
     // 1. Eagerly open IndexedDB
     db.open();
 
