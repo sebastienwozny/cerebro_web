@@ -464,7 +464,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     const menu = plusMenuRef.current;
     if (!menu) return;
     menu.querySelectorAll("[data-plus-item]").forEach((el, i) => {
-      (el as HTMLElement).classList.toggle("active", i === plusIdxRef.current);
+      const isActive = i === plusIdxRef.current;
+      (el as HTMLElement).classList.toggle("active", isActive);
+      if (isActive) (el as HTMLElement).scrollIntoView({ block: "nearest" });
     });
   }, []);
 
