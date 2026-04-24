@@ -471,6 +471,13 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // lives in a useEffect closure) always reads the latest value.
   handleBlockPosRef.current = handleBlockPos;
 
+  // Keep the last valid handlePos so the "+" fades out at its last known
+  // position when handlePos clears (menu closed, scroll) instead of snapping
+  // to (0, 0) during the .hide opacity transition.
+  const lastHandlePosRef = useRef(handlePos);
+  if (handlePos) lastHandlePosRef.current = handlePos;
+  const displayHandlePos = handlePos ?? lastHandlePosRef.current;
+
   // Freeze position + flip direction once when menu opens.
   useLayoutEffect(() => {
     if (!showPlusMenu) { menuPosFrozen.current = false; setFrozenMenuPos(null); return; }
@@ -516,7 +523,22 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         e.preventDefault();
         e.stopPropagation();
         const rect = dragEl.getBoundingClientRect();
-        blockMenuBlockPosRef.current = handleBlockPosRef.current;
+        // handleBlockPos snaps to the nearest text position (via
+        // TextSelection.near) — for leaf blocks like <hr> it lands in the
+        // adjacent paragraph, not the divider. Resolve the hovered DOM
+        // element directly for those cases.
+        let pos: number | null = handleBlockPosRef.current;
+        const hovered = hoveredBlockRef.current;
+        if (hovered && hovered.tagName === "HR" && hovered.parentNode) {
+          try {
+            const parent = hovered.parentNode;
+            const index = Array.prototype.indexOf.call(parent.childNodes, hovered);
+            pos = editor.view.posAtDOM(parent, index);
+          } catch {
+            // fall back to handleBlockPosRef
+          }
+        }
+        blockMenuBlockPosRef.current = pos;
         setBlockMenuPos({ x: rect.right + 4, y: rect.top });
         setShowBlockMenu(true);
       };
@@ -542,27 +564,37 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     editor.chain().focus().setTextSelection({ from, to }).setParagraph().unsetAllMarks().setTextSelection(to).run();
   }, [editor]);
 
-  const handleBlockDuplicate = useCallback(() => {
-    if (!editor || blockMenuBlockPosRef.current === null) return;
+  // Resolve the top-level block node at blockMenuBlockPosRef. Handles the
+  // depth === 0 case (position sits at a leaf like <hr>) via nodeAfter.
+  const getTargetBlock = useCallback(() => {
+    if (!editor || blockMenuBlockPosRef.current === null) return null;
     const { state } = editor;
     const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
-    if ($pos.depth === 0) return;
+    if ($pos.depth === 0) {
+      const node = $pos.nodeAfter;
+      if (!node) return null;
+      return { from: $pos.pos, to: $pos.pos + node.nodeSize, node };
+    }
     const from = $pos.before(1);
     const node = state.doc.nodeAt(from);
-    if (!node) return;
-    editor.chain().focus().insertContentAt(from + node.nodeSize, node.toJSON()).run();
+    if (!node) return null;
+    return { from, to: from + node.nodeSize, node };
   }, [editor]);
 
+  const handleBlockDuplicate = useCallback(() => {
+    if (!editor) return;
+    const target = getTargetBlock();
+    if (!target) return;
+    editor.chain().focus().insertContentAt(target.to, target.node.toJSON()).run();
+  }, [editor, getTargetBlock]);
+
   const handleBlockCopy = useCallback(() => {
-    if (!editor || blockMenuBlockPosRef.current === null) return;
-    const { state } = editor;
-    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
-    if ($pos.depth === 0) return;
-    const node = state.doc.nodeAt($pos.before(1));
-    if (!node) return;
-    const dom = DOMSerializer.fromSchema(editor.schema).serializeNode(node) as HTMLElement;
+    if (!editor) return;
+    const target = getTargetBlock();
+    if (!target) return;
+    const dom = DOMSerializer.fromSchema(editor.schema).serializeNode(target.node) as HTMLElement;
     const html = dom.outerHTML;
-    const text = node.textContent;
+    const text = target.node.textContent;
     if (typeof ClipboardItem !== "undefined") {
       const item = new ClipboardItem({
         "text/html": new Blob([html], { type: "text/html" }),
@@ -574,18 +606,14 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     } else {
       navigator.clipboard.writeText(text).catch(() => {});
     }
-  }, [editor]);
+  }, [editor, getTargetBlock]);
 
   const handleBlockDelete = useCallback(() => {
-    if (!editor || blockMenuBlockPosRef.current === null) return;
-    const { state } = editor;
-    const $pos = state.doc.resolve(blockMenuBlockPosRef.current);
-    if ($pos.depth === 0) return;
-    const from = $pos.before(1);
-    const node = state.doc.nodeAt(from);
-    if (!node) return;
-    editor.chain().focus().deleteRange({ from, to: from + node.nodeSize }).run();
-  }, [editor]);
+    if (!editor) return;
+    const target = getTargetBlock();
+    if (!target) return;
+    editor.chain().focus().deleteRange({ from: target.from, to: target.to }).run();
+  }, [editor, getTargetBlock]);
 
   // Close plus menu on click outside or Escape
   useEffect(() => {
@@ -774,8 +802,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           ref={plusBtnRef}
           className={`drag-handle fixed border-none ${!handlePos || handleHidden || showPlusMenu || hasSelection ? "hide" : ""}`}
           style={{
-            left: handlePos?.left ?? 0,
-            top: handlePos?.top ?? 0,
+            left: displayHandlePos?.left ?? 0,
+            top: displayHandlePos?.top ?? 0,
           }}
           onMouseDown={(e) => {
             e.preventDefault();
@@ -816,6 +844,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         <BlockMenu
           x={blockMenuPos.x}
           y={blockMenuPos.y}
+          editor={editor}
+          blockPos={blockMenuBlockPosRef.current}
           onTurnInto={handleTurnInto}
           onResetFormatting={handleResetFormatting}
           onDuplicate={handleBlockDuplicate}

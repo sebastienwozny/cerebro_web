@@ -211,7 +211,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
       hoveredBlockRef.current = null;
     };
     const onResize = () => {
-      if (showPlusMenuRef.current) return;
+      if (showPlusMenuRef.current || showBlockMenuRef.current) return;
       const block = hoveredBlockRef.current;
       if (!block || !block.isConnected) return;
       computeFromBlockRef.current?.(block);
@@ -263,6 +263,20 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
     if (prevShowBlockMenuRef.current && !showBlockMenu) resetHandles();
     prevShowBlockMenuRef.current = showBlockMenu;
   }, [showBlockMenu, resetHandles]);
+
+  // Freeze all handles while the block menu is open by blocking pointer
+  // events on the editor DOM — the global-drag-handle extension listens for
+  // mousemove on it, so disabling the events stops it from updating the grip
+  // position (and the `hide` class) as the cursor moves across blocks.
+  useEffect(() => {
+    if (!editor || !showBlockMenu) return;
+    const tiptap = editor.view.dom as HTMLElement;
+    const prev = tiptap.style.pointerEvents;
+    tiptap.style.pointerEvents = "none";
+    return () => {
+      tiptap.style.pointerEvents = prev;
+    };
+  }, [showBlockMenu, editor]);
   const prevHasSelectionRef = useRef(false);
   useEffect(() => {
     if (prevHasSelectionRef.current && !hasSelection) resetHandles();

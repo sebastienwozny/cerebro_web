@@ -1,5 +1,6 @@
 import { forwardRef, useLayoutEffect, useRef, useState } from "react";
 import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
+import { useLockOverlayScroll } from "../hooks/useLockOverlayScroll";
 
 interface Props {
   contentLeft: number;
@@ -13,6 +14,7 @@ interface Props {
 
 const PlusMenu = forwardRef<HTMLDivElement, Props>(
   ({ contentLeft, lineBottom, lineH, flipUp, onSelect, onClose, onHoverItem }, ref) => {
+    useLockOverlayScroll();
     const scrollRef = useRef<HTMLDivElement>(null);
     const [fadeTop, setFadeTop] = useState(false);
     const [fadeBottom, setFadeBottom] = useState(false);
