@@ -76,9 +76,10 @@ export default function VideoBlockView({ node, getPos, selected, editor }: NodeV
         width: "100%",
         aspectRatio: aspectCss,
         borderRadius: 6,
-        backgroundImage: poster ? `url(${poster})` : undefined,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        // No backgroundImage — PVP covers this spacer entirely. Showing the
+        // poster here meant that when PVP was transiently mispositioned (e.g.
+        // immediately after undo of a delete), the stale poster appeared as
+        // a second "video" stacked with PVP.
       }}
       draggable={false}
     />
