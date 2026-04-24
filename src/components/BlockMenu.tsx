@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Type, RotateCcw, Copy, Trash2, Files } from "lucide-react";
+import { ChevronRight, Type, RotateCcw, Copy, Trash2, Files, Download } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
 import { useLockOverlayScroll } from "../hooks/useLockOverlayScroll";
@@ -12,11 +12,13 @@ function getBlockDefAtPos(editor: Editor | null, pos: number | null): BlockDef {
   if (!editor || pos === null) return text;
   const $pos = editor.state.doc.resolve(pos);
   // When $pos sits between top-level children of doc (e.g. right at a leaf
-  // block like <hr>), depth === 0 — look at nodeAfter to identify the block.
+  // block like <hr>, <img>, or a video), depth === 0 — look at nodeAfter to
+  // identify the block.
   if ($pos.depth === 0) {
-    if ($pos.nodeAfter?.type.name === "horizontalRule") {
-      return BLOCK_DEFS.find((b) => b.type === "hr") ?? text;
-    }
+    const name = $pos.nodeAfter?.type.name;
+    if (name === "horizontalRule") return BLOCK_DEFS.find((b) => b.type === "hr") ?? text;
+    if (name === "image") return BLOCK_DEFS.find((b) => b.type === "image") ?? text;
+    if (name === "video") return BLOCK_DEFS.find((b) => b.type === "video") ?? text;
     return text;
   }
   for (let d = $pos.depth; d >= 1; d--) {
@@ -46,6 +48,7 @@ interface Props {
   onDuplicate: () => void;
   onCopy: () => void;
   onDelete: () => void;
+  onDownload: () => void;
   onClose: () => void;
 }
 
@@ -59,9 +62,12 @@ export default function BlockMenu({
   onDuplicate,
   onCopy,
   onDelete,
+  onDownload,
   onClose,
 }: Props) {
   const currentDef = useMemo(() => getBlockDefAtPos(editor, blockPos), [editor, blockPos]);
+  const isMedia = currentDef.type === "image" || currentDef.type === "video";
+  const hasTextOps = !isMedia && currentDef.type !== "hr";
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
   const [showSubmenu, setShowSubmenu] = useState(false);
@@ -113,7 +119,7 @@ export default function BlockMenu({
       </span>
       <div className="floating-divider mb-1" />
 
-      {currentDef.type !== "hr" && (
+      {hasTextOps && (
         <>
           {/* Turn into — shows submenu on hover */}
           <div
@@ -167,6 +173,20 @@ export default function BlockMenu({
 
           <div className="floating-divider my-1" />
         </>
+      )}
+
+      {isMedia && (
+        <button
+          className="floating-item flex items-center gap-3 px-3 py-2 mx-1.5 rounded-lg border-none cursor-pointer select-none bg-transparent transition-colors duration-100"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onDownload();
+            onClose();
+          }}
+        >
+          <Download className="w-4 h-4 shrink-0" strokeWidth={2} />
+          <span className="text-[13px] flex-1 text-left">Download</span>
+        </button>
       )}
 
       <button

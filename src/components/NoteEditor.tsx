@@ -524,19 +524,19 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         e.stopPropagation();
         const rect = dragEl.getBoundingClientRect();
         // handleBlockPos snaps to the nearest text position (via
-        // TextSelection.near) — for leaf blocks like <hr> it lands in the
-        // adjacent paragraph, not the divider. Resolve the hovered DOM
-        // element directly for those cases.
+        // TextSelection.near) — for leaf blocks (<hr>, <img>, video) it
+        // lands in the adjacent paragraph, not the actual block. Resolve
+        // the hovered element's PM position directly via posAtCoords, which
+        // returns the exact position without snapping to text.
         let pos: number | null = handleBlockPosRef.current;
         const hovered = hoveredBlockRef.current;
-        if (hovered && hovered.tagName === "HR" && hovered.parentNode) {
-          try {
-            const parent = hovered.parentNode;
-            const index = Array.prototype.indexOf.call(parent.childNodes, hovered);
-            pos = editor.view.posAtDOM(parent, index);
-          } catch {
-            // fall back to handleBlockPosRef
-          }
+        if (hovered) {
+          const hRect = hovered.getBoundingClientRect();
+          const result = editor.view.posAtCoords({
+            left: hRect.left + hRect.width / 2,
+            top: hRect.top + hRect.height / 2,
+          });
+          if (result) pos = result.pos;
         }
         blockMenuBlockPosRef.current = pos;
         setBlockMenuPos({ x: rect.right + 4, y: rect.top });
@@ -613,6 +613,44 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     const target = getTargetBlock();
     if (!target) return;
     editor.chain().focus().deleteRange({ from: target.from, to: target.to }).run();
+  }, [editor, getTargetBlock]);
+
+  const handleBlockDownload = useCallback(() => {
+    if (!editor) return;
+    const target = getTargetBlock();
+    if (!target) return;
+    const { node } = target;
+    const src = node.attrs.src as string | null;
+    if (!src) return;
+    const MIME_EXT: Record<string, string> = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/gif": "gif",
+      "image/webp": "webp",
+      "image/svg+xml": "svg",
+      "image/heic": "heic",
+      "video/mp4": "mp4",
+      "video/quicktime": "mov",
+      "video/webm": "webm",
+      "video/ogg": "ogv",
+      "video/x-msvideo": "avi",
+    };
+    const extFrom = (mime: string | null | undefined, fallback: string) =>
+      (mime && MIME_EXT[mime.toLowerCase()]) ?? fallback;
+    let filename = "download";
+    if (node.type.name === "image") {
+      const mime = /^data:(image\/[a-z0-9+.-]+)/i.exec(src)?.[1];
+      filename = `image-${Date.now()}.${extFrom(mime, "png")}`;
+    } else if (node.type.name === "video") {
+      const mime = node.attrs.mimeType as string | null;
+      filename = `video-${Date.now()}.${extFrom(mime, "mp4")}`;
+    }
+    const a = document.createElement("a");
+    a.href = src;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   }, [editor, getTargetBlock]);
 
   // Close plus menu on click outside or Escape
@@ -851,6 +889,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           onDuplicate={handleBlockDuplicate}
           onCopy={handleBlockCopy}
           onDelete={handleBlockDelete}
+          onDownload={handleBlockDownload}
           onClose={() => setShowBlockMenu(false)}
         />
       )}
