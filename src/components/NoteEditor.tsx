@@ -24,6 +24,7 @@ import { readVideoFile, VideoTooLargeError } from "../lib/videoUtils";
 import { getVideoUrl } from "../lib/videoUrlCache";
 import { CodeBlockWithView, ImageWithAspect, VideoBlock } from "../lib/editor/extensions";
 import FormatToolbar from "./FormatToolbar";
+import MediaToolbar from "./MediaToolbar";
 import PlusMenu from "./PlusMenu";
 import BlockMenu from "./BlockMenu";
 
@@ -49,6 +50,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   const initialHtml = useRef(blocksToHtml(blocks, videoUrlsRef.current));
   const [showToolbar, setShowToolbar] = useState(false);
   const [formatTooltips, setFormatTooltips] = useState(true);
+  const [showMediaToolbar, setShowMediaToolbar] = useState(false);
+  const [mediaTooltips, setMediaTooltips] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInsertPosRef = useRef<number | null>(null);
@@ -136,11 +139,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       // Don't show the style toolbar for NodeSelection — that's what the
       // drag-handle extension creates when grabbing a block, and it would
       // flash the bar during a drag.
-      const sel = !editor.state.selection.empty && !(editor.state.selection instanceof NodeSelection);
+      const selection = editor.state.selection;
+      const sel = !selection.empty && !(selection instanceof NodeSelection);
       setHasSelection(sel);
       // Selections inside a code block shouldn't get the prose format bar —
       // bold/italic/link don't apply to raw code.
       setShowToolbar(sel && !editor.isActive("codeBlock"));
+      // Show the media toolbar when an image or video is node-selected.
+      const isMediaNode = selection instanceof NodeSelection
+        && (selection.node.type.name === "image" || selection.node.type.name === "video");
+      setShowMediaToolbar(isMediaNode);
       linkOnSelectionChangeRef.current(editor.isActive("link"));
     },
     editorProps: {
@@ -460,6 +468,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   useEffect(() => {
     if (!showToolbar) setFormatTooltips(true);
   }, [showToolbar]);
+  useEffect(() => {
+    if (!showMediaToolbar) setMediaTooltips(true);
+  }, [showMediaToolbar]);
 
   // ── Block handle ("+" button next to focused block) ──
   const {
@@ -470,6 +481,32 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // Mirror handleBlockPos into a ref so the drag-handle click listener (which
   // lives in a useEffect closure) always reads the latest value.
   handleBlockPosRef.current = handleBlockPos;
+
+  // Header videos are overlaid by PersistentVideoPlayer (PVP), which captures
+  // clicks for play/pause — so VideoBlockView's mousedown never fires. PVP
+  // dispatches a "pvp-select" window event with the video's blockId; find the
+  // matching node in this editor's doc and create a NodeSelection so the media
+  // toolbar shows.
+  useEffect(() => {
+    if (!editor || !editable) return;
+    const onPvpSelect = (e: Event) => {
+      const { blockId } = (e as CustomEvent).detail as { blockId: string };
+      if (!blockId) return;
+      let targetPos = -1;
+      editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === "video" && node.attrs.blockId === blockId) {
+          targetPos = pos;
+          return false;
+        }
+      });
+      if (targetPos < 0) return;
+      const cur = editor.state.selection;
+      if (cur instanceof NodeSelection && cur.from === targetPos) return;
+      editor.chain().setNodeSelection(targetPos).run();
+    };
+    window.addEventListener("pvp-select", onPvpSelect);
+    return () => window.removeEventListener("pvp-select", onPvpSelect);
+  }, [editor, editable]);
 
   // Keep the last valid handlePos so the "+" fades out at its last known
   // position when handlePos clears (menu closed, scroll) instead of snapping
@@ -610,6 +647,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
 
   const handleBlockDelete = useCallback(() => {
     if (!editor) return;
+    const sel = editor.state.selection;
+    // When a NodeSelection is active on the target (e.g. from the media
+    // toolbar), use deleteSelection so the transaction is a simple node-delete
+    // that undo can cleanly reverse. deleteRange works too but leaves a
+    // transient state where the next block briefly takes the first-child slot,
+    // which can desync the header-detection logic during undo.
+    if (sel instanceof NodeSelection && sel.from === blockMenuBlockPosRef.current) {
+      editor.chain().focus().deleteSelection().run();
+      return;
+    }
     const target = getTargetBlock();
     if (!target) return;
     editor.chain().focus().deleteRange({ from: target.from, to: target.to }).run();
@@ -652,6 +699,16 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     a.click();
     document.body.removeChild(a);
   }, [editor, getTargetBlock]);
+
+  // Run a handleBlock* action on the currently NodeSelected node by routing
+  // through blockMenuBlockPosRef (which getTargetBlock reads).
+  const runOnSelectedNode = useCallback((fn: () => void) => {
+    if (!editor) return;
+    const sel = editor.state.selection;
+    if (!(sel instanceof NodeSelection)) return;
+    blockMenuBlockPosRef.current = sel.from;
+    fn();
+  }, [editor]);
 
   // Close plus menu on click outside or Escape
   useEffect(() => {
@@ -828,6 +885,18 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           onExitLinkMode={exitLinkMode}
           onSetFormatTooltips={setFormatTooltips}
           onSetLinkTooltips={setLinkTooltips}
+        />,
+        document.body,
+      )}
+      {editable && createPortal(
+        <MediaToolbar
+          visible={showMediaToolbar}
+          tooltipsEnabled={mediaTooltips}
+          onSetTooltipsEnabled={setMediaTooltips}
+          onDownload={() => runOnSelectedNode(handleBlockDownload)}
+          onDuplicate={() => runOnSelectedNode(handleBlockDuplicate)}
+          onCopy={() => runOnSelectedNode(handleBlockCopy)}
+          onDelete={() => runOnSelectedNode(handleBlockDelete)}
         />,
         document.body,
       )}

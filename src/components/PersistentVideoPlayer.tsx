@@ -375,6 +375,10 @@ function PersistentVideoPlayerImpl({
       onClick={(e) => {
         if (!unlocked) return;
         setLocalSelected(true);
+        // Let NoteEditor create a NodeSelection on the matching video node so
+        // the media toolbar can trigger (PVP overlays the spacer VideoBlockView,
+        // so its own onMouseDown never fires for header videos).
+        window.dispatchEvent(new CustomEvent("pvp-select", { detail: { blockId } }));
         const v = videoRef.current;
         if (v) { if (v.paused) v.play(); else v.pause(); }
         showControls();
