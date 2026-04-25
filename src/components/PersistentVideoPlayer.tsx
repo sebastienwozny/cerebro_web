@@ -103,7 +103,15 @@ function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
     v.playsInline = true;
     v.muted = true;
     v.preload = "auto";
-    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block";
+    // opacity:0 + transition: video stays invisible while paused so the
+    // poster <img> behind it shows through, then fades to 1 over 200ms when
+    // playing. This cross-fades hover into the playing video without a hard
+    // cut. (Note: the rest/hover rendering on the canvas-layer goes through
+    // a compositor path that bypasses macOS color management on wide-gamut
+    // displays — opening the card switches to the natural color-managed
+    // path. Forcing color management here via filter() over-saturates and
+    // an architectural fix would require restructuring the canvas transform.)
+    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity 0.2s ease-out";
     videoElementCache.set(blockId, v);
   }
   return v;
@@ -127,7 +135,7 @@ export function prewarmAudio(blockId: string) {
 function PersistentVideoPlayerImpl({
   blockId, videoBlob, posterDataUrl,
   canvasRect, openRect, openProgress,
-  playing, unlocked, zIndex, pointerEvents, rotationDeg = 0,
+  playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
   transformTransition = false, showPoster = false, portalToBody = false,
   animateLeftTop = false, isSelected = false, isDeleting = false, isPopping = false, children,
 }: Props) {
@@ -141,6 +149,10 @@ function PersistentVideoPlayerImpl({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
+    // Cross-fade poster ↔ video: video is invisible at rest (so the lighter
+    // poster shows through), fades to opacity 1 when playing (revealing the
+    // color-managed darker video).
+    v.style.opacity = playing ? "1" : "0";
     if (playing) {
       v.play().catch(() => {});
     } else {
@@ -407,7 +419,10 @@ function PersistentVideoPlayerImpl({
         style={{
           width: "100%",
           height: "100%",
-          transform: "translateZ(0)",
+          // `scale(1.02)` on hover mirrors the NoteCard hover. The pre-applied
+          // translateZ(0) keeps the layer GPU-stable so the scale is a pure
+          // compositor op (no texture resample of the video).
+          transform: isHovered ? "translateZ(0) scale(1.02)" : "translateZ(0)",
           transformOrigin: "center",
           willChange: "transform",
           transition: transformTransition ? "transform 0.15s ease-out" : "none",

@@ -271,10 +271,10 @@ function NoteCard({
           transform: isDeleting
             ? "scale(0)"
             : isDragging
-                // Video cards drag without tilt or scale: rotation pushes
-                // Chrome's video compositor off its color-managed path (reads
-                // lighter), and any card-level scale not mirrored by the PVP
-                // portal would expose the card background behind the video.
+                // Drag-only exception: video cards skip rotation/scale because
+                // PVP isn't rotation-synced (it stays axis-aligned), so the
+                // card frame would rotate around a still video. Hover scale is
+                // mirrored on PVP via the isHovered prop, so it's safe there.
                 ? headerMedia?.type === "video"
                   ? "none"
                   : `rotate(${rotation}deg) scale(1.02)`
@@ -285,12 +285,7 @@ function NoteCard({
                   : t > 0
                     ? "none"
                     : isHovered && !isSelected && !suppressScale && !isResizing
-                      // Video cards skip the hover scale: resampling the
-                      // <video> texture under a scale transition causes a
-                      // brightness flash (most visible at close end).
-                      ? headerMedia?.type === "video"
-                        ? "none"
-                        : "scale(1.02)"
+                      ? "scale(1.02)"
                       : "none",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
