@@ -3,8 +3,6 @@ import type { Editor } from "@tiptap/react";
 import { TextSelection } from "@tiptap/pm/state";
 
 export interface HandlePos {
-  top: number;
-  left: number;
   contentLeft: number;
   lineH: number;
   lineBottom: number;
@@ -28,9 +26,7 @@ const MARGIN_BAND = 120;
 export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, hasSelection, plusMenuRef }: Args) {
   const [handlePos, setHandlePos] = useState<HandlePos | null>(null);
   const [handleBlockPos, setHandleBlockPos] = useState<number | null>(null);
-  const [handleHidden, setHandleHidden] = useState(true);
   const editorWrapRef = useRef<HTMLDivElement>(null);
-  const plusBtnRef = useRef<HTMLButtonElement>(null);
   const hoveredBlockRef = useRef<HTMLElement | null>(null);
   const computeFromBlockRef = useRef<((found: HTMLElement) => void) | null>(null);
   const showPlusMenuRef = useRef(showPlusMenu);
@@ -38,8 +34,10 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
   const showBlockMenuRef = useRef(showBlockMenu);
   showBlockMenuRef.current = showBlockMenu;
 
-  // Main positioning — mirrors tiptap-extension-global-drag-handle's
-  // detection + positioning logic so the two handles stay aligned.
+  // Tracks the hovered block so the slash menu has a position to anchor to.
+  // We also override the grip icon's position imperatively because the
+  // extension's own logic mispositions it for list items, code blocks, and
+  // task items.
   useEffect(() => {
     if (!editor || !editable) return;
     const tiptap = editor.view.dom as HTMLElement;
@@ -51,10 +49,9 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
       const paddingTop = parseInt(cs.paddingTop, 10) || 0;
       const rect = found.getBoundingClientRect();
       let top = rect.top + paddingTop + (lineHeight - 24) / 2;
-      // Code blocks: center the handle vertically in the pre's top padding
-      // (the reserved header area), so it sits alongside the language picker
-      // and copy button rather than next to the first line of code.
-      if (found.matches("pre")) top = rect.top + (paddingTop - 24) / 2;
+      // Code blocks: pin the grip to the very top of the pre (above the
+      // first line of code, in the padding-top header zone).
+      if (found.matches("pre")) top = rect.top;
       // Task items: the checkbox sits 5px lower than text baseline
       // (via `label { margin-top: 5px }`), so align handles to its center instead.
       if (found.matches('ul[data-type="taskList"] li')) {
@@ -65,8 +62,7 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
           top = cbRect.top + (cbRect.height - 24) / 2;
         }
       }
-      const dragLeft = rect.left - DRAG_WIDTH;
-      const plusLeft = dragLeft - 24 - 4;
+      const dragLeft = rect.left - DRAG_WIDTH - 6;
       // For list items, `rect.left` is the bullet/checkbox's left (they're
       // flex children of the li), so aligning the menu with it puts the menu
       // under the marker — matching how paragraphs land on their own text left.
@@ -74,13 +70,12 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
       // Bottom of the block's first line — used to anchor the menu directly
       // below the cursor's line regardless of the block's font-size.
       const lineBottom = rect.top + paddingTop + lineHeight;
-      return { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom };
+      return { top, dragLeft, contentLeft, lineHeight, lineBottom };
     };
 
-    // Synchronous (no rAF) so the drag handle and our "+" land on the same
-    // row in the same mousemove tick. With rAF, fast movement can leave the
-    // drag handle on the previous frame's position while our "+" has already
-    // moved via React state — visible as a 1-row offset in frame-by-frame.
+    // Synchronous (no rAF) imperative override of the extension's grip
+    // position — the extension mispositions it for list items / pre / task
+    // items, so we recompute and snap the element ourselves.
     const syncDragHandle = (dragLeft: number, top: number) => {
       const parent = tiptap.parentElement;
       const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
@@ -90,28 +85,13 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
       }
     };
 
-    // Mirror "+" position imperatively — React re-render would add another
-    // frame of lag vs the drag handle (which we position synchronously).
-    const syncPlusButton = (plusLeft: number, top: number) => {
-      const plusBtn = plusBtnRef.current;
-      if (plusBtn) {
-        plusBtn.style.left = `${plusLeft}px`;
-        plusBtn.style.top = `${top}px`;
-      }
-    };
-
     computeFromBlockRef.current = (found: HTMLElement) => {
       editorWrapRef.current?.classList.remove("handles-hidden");
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
-      // Skip React state update while the menu is open — the imperative DOM
-      // update below is synchronous and sufficient. setHandlePos while scrolling
-      // causes an async re-render that re-applies a slightly stale position,
-      // fighting the imperative update and producing the visible inertia effect.
+      const { top, dragLeft, contentLeft, lineHeight, lineBottom } = computeFromBlock(found);
       if (!showPlusMenu) {
-        setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
+        setHandlePos({ contentLeft, lineH: lineHeight, lineBottom });
       }
       syncDragHandle(dragLeft, top);
-      syncPlusButton(plusLeft, top);
       const menu = plusMenuRef.current;
       if (menu) {
         menu.style.left = `${contentLeft}px`;
@@ -149,15 +129,9 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
 
       hoveredBlockRef.current = found;
       editorWrapRef.current?.classList.remove("handles-hidden");
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
+      const { top, dragLeft, contentLeft, lineHeight, lineBottom } = computeFromBlock(found);
+      setHandlePos({ contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
-      syncPlusButton(plusLeft, top);
-      // Show our "+" synchronously so its fade-in matches the extension's
-      // drag handle (which toggles its `hide` class via direct DOM in this
-      // same mousemove tick — going through React state would lag by a frame).
-      plusBtnRef.current?.classList.remove("hide");
-      setHandleHidden(false);
       resolveBlockPos(probeX, probeY);
     };
 
@@ -178,16 +152,13 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
 
       hoveredBlockRef.current = found;
       editorWrapRef.current?.classList.remove("handles-hidden");
-      const { top, plusLeft, contentLeft, dragLeft, lineHeight, lineBottom } = computeFromBlock(found);
-      setHandlePos({ top, left: plusLeft, contentLeft, lineH: lineHeight, lineBottom });
+      const { top, dragLeft, contentLeft, lineHeight, lineBottom } = computeFromBlock(found);
+      setHandlePos({ contentLeft, lineH: lineHeight, lineBottom });
       syncDragHandle(dragLeft, top);
-      syncPlusButton(plusLeft, top);
       // Extension hides its drag handle on tiptap mouseout; force-show while
       // we're anchored to a block in the margin band.
       const dragEl = tiptap.parentElement?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
       dragEl?.classList.remove("hide");
-      plusBtnRef.current?.classList.remove("hide");
-      setHandleHidden(false);
       resolveBlockPos(probeX, probeY);
     };
 
@@ -283,37 +254,10 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
     prevHasSelectionRef.current = hasSelection;
   }, [hasSelection, resetHandles]);
 
-  // Mirror the drag handle's `hide` class onto our "+" so both fade together
-  useEffect(() => {
-    if (!editor || !editable) return;
-    let observer: MutationObserver | null = null;
-    let cancelled = false;
-    const attach = () => {
-      if (cancelled) return;
-      const parent = editor.view.dom.parentElement;
-      const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]");
-      if (!dragEl) {
-        requestAnimationFrame(attach);
-        return;
-      }
-      const sync = () => setHandleHidden(dragEl.classList.contains("hide"));
-      sync();
-      observer = new MutationObserver(sync);
-      observer.observe(dragEl, { attributes: true, attributeFilter: ["class"] });
-    };
-    attach();
-    return () => {
-      cancelled = true;
-      observer?.disconnect();
-    };
-  }, [editor, editable]);
-
   return {
     handlePos,
     handleBlockPos,
-    handleHidden,
     editorWrapRef,
-    plusBtnRef,
     hoveredBlockRef,
     computeFromBlockRef,
   };

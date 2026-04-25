@@ -14,7 +14,6 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useBlockHandle } from "../hooks/useBlockHandle";
 import { useLinkMode } from "../hooks/useLinkMode";
 import { useEditorDragScroll } from "../hooks/useEditorDragScroll";
-import { Plus } from "lucide-react";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
 import { markdownToHtml, looksLikeMarkdown } from "../lib/markdownParser";
@@ -474,10 +473,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!showMediaToolbar) setMediaTooltips(true);
   }, [showMediaToolbar]);
 
-  // ── Block handle ("+" button next to focused block) ──
+  // ── Block handle (drag grip + slash menu position tracking) ──
   const {
-    handlePos, handleBlockPos, handleHidden,
-    editorWrapRef, plusBtnRef, hoveredBlockRef, computeFromBlockRef,
+    handlePos, handleBlockPos,
+    editorWrapRef, hoveredBlockRef, computeFromBlockRef,
   } = useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, hasSelection, plusMenuRef });
 
   // Mirror handleBlockPos into a ref so the drag-handle click listener (which
@@ -509,13 +508,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     window.addEventListener("pvp-select", onPvpSelect);
     return () => window.removeEventListener("pvp-select", onPvpSelect);
   }, [editor, editable]);
-
-  // Keep the last valid handlePos so the "+" fades out at its last known
-  // position when handlePos clears (menu closed, scroll) instead of snapping
-  // to (0, 0) during the .hide opacity transition.
-  const lastHandlePosRef = useRef(handlePos);
-  if (handlePos) lastHandlePosRef.current = handlePos;
-  const displayHandlePos = handlePos ?? lastHandlePosRef.current;
 
   // Freeze position + flip direction once when menu opens.
   useLayoutEffect(() => {
@@ -748,7 +740,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!showPlusMenu) return;
     const onClick = (e: MouseEvent) => {
       if (plusMenuRef.current?.contains(e.target as Node)) return;
-      if (plusBtnRef.current?.contains(e.target as Node)) return;
       setShowPlusMenu(false);
     };
     const onKey = (e: KeyboardEvent) => {
@@ -786,49 +777,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       window.removeEventListener("keydown", onKey, true);
     };
   }, [showPlusMenu, highlightPlusItem]);
-
-  function handlePlusClick() {
-    if (!editor) return;
-    if (handleBlockPos !== null) {
-      editor.chain().focus().setTextSelection(handleBlockPos).run();
-    }
-    const { $from } = editor.state.selection;
-    const parentEmpty = $from.parent.content.size === 0;
-    const plusEl = plusBtnRef.current;
-    const dragEl = editor.view.dom.parentElement?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
-    // Kill the opacity transition so the upcoming hide snaps instantly
-    // instead of fading (150ms) at the new line. Restored next frame so
-    // the normal fade-in/out works on subsequent hovers.
-    if (plusEl) plusEl.style.transition = "none";
-    if (dragEl) dragEl.style.transition = "none";
-    if (!parentEmpty) {
-      let liType: "listItem" | "taskItem" | null = null;
-      for (let d = $from.depth; d > 0; d--) {
-        const name = $from.node(d).type.name;
-        if (name === "listItem" || name === "taskItem") { liType = name; break; }
-      }
-      if (liType) {
-        editor.chain().focus().splitListItem(liType).run();
-      } else {
-        const blockEnd = $from.after(1);
-        editor.chain().focus().insertContentAt(blockEnd, { type: "paragraph" }).setTextSelection(blockEnd + 1).run();
-      }
-      const pos = editor.state.selection.$from.pos;
-      const dom = editor.view.domAtPos(pos).node;
-      const el = (dom instanceof HTMLElement ? dom : dom.parentElement) as HTMLElement | null;
-      const topLevel = el?.closest('ul > li, ol > li, .tiptap > *') as HTMLElement | null;
-      if (topLevel) {
-        hoveredBlockRef.current = topLevel;
-        computeFromBlockRef.current?.(topLevel);
-      }
-    }
-    plusIdxRef.current = 0;
-    setShowPlusMenu((v) => !v);
-    requestAnimationFrame(() => {
-      if (plusEl) plusEl.style.transition = "";
-      if (dragEl) dragEl.style.transition = "";
-    });
-  }
 
   function applyBlockType(def: BlockDef) {
     if (!editor) return;
@@ -934,28 +882,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         document.body,
       )}
 
-      {/* Block handle "+" button — always mounted (gated via `.hide`) so the
-          opacity transition (150ms on `.drag-handle`) fades the icon in/out
-          instead of snapping when handlePos appears/disappears. */}
-      {editable && (
-        <button
-          ref={plusBtnRef}
-          className={`drag-handle fixed border-none ${!handlePos || handleHidden || showPlusMenu || hasSelection ? "hide" : ""}`}
-          style={{
-            left: displayHandlePos?.left ?? 0,
-            top: displayHandlePos?.top ?? 0,
-          }}
-          onMouseDown={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handlePlusClick();
-          }}
-        >
-          <Plus className="w-4 h-4" strokeWidth={2} />
-        </button>
-      )}
-
-      {/* Plus menu — portaled into the editor scroll container so it uses
+      {/* Slash menu — portaled into the editor scroll container so it uses
           position:absolute in document-space. The browser then handles scroll
           tracking natively with zero JS lag. */}
       {editable && showPlusMenu && handlePos && (() => {
