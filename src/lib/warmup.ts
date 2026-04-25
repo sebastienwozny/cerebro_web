@@ -43,10 +43,5 @@ export function warmup() {
     // main chunk via Canvas.tsx, so no extra fetch).
     const dummy = { v: 0 };
     gsap.to(dummy, { v: 1, duration: 0.01 });
-
-    // 4. Pre-fetch the lazy NoteEditor chunk so the first card open doesn't
-    // wait on a chunk download — without this, Suspense flashes a `null`
-    // fallback for a frame on the first open of the session.
-    import("../components/NoteEditor");
   });
 }
