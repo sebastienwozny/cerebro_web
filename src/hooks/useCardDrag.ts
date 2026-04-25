@@ -21,6 +21,12 @@ interface UseCardDragOptions {
 
 export function useCardDrag(opts: UseCardDragOptions) {
   const [isDragging, setIsDragging] = useState(false);
+  // Press visual armed once we're confident the user intends to drag (any
+  // movement, or a 100ms hold without moving). Plain quick taps never set
+  // it, so the card doesn't scale-down on its way to opening — only when
+  // a drag is actually starting.
+  const [isPressed, setIsPressed] = useState(false);
+  const pressTimerRef = useRef<number>(0);
   const dragStart = useRef<{ px: number; py: number; noteX: number; noteY: number } | null>(null);
   const lastMoveRef = useRef<{ x: number; time: number }>({ x: 0, time: 0 });
   const isDraggingRef = useRef(false);
@@ -58,6 +64,12 @@ export function useCardDrag(opts: UseCardDragOptions) {
 
       dragStart.current = { px: e.clientX, py: e.clientY, noteX: positionX, noteY: positionY };
       didDuplicateRef.current = false;
+      // Hold-without-moving for 100ms also counts as drag intent (the
+      // user pressed deliberately). Quick tap-and-release before this
+      // fires keeps isPressed false → no animation, just open.
+      pressTimerRef.current = window.setTimeout(() => {
+        setIsPressed(true);
+      }, 100);
       onBringToFront(noteId);
 
       // Attach listeners synchronously to avoid missing fast pointerup
@@ -66,6 +78,14 @@ export function useCardDrag(opts: UseCardDragOptions) {
         const { scale, noteId: nid, onDragStart } = optsRef.current;
         const dx = (me.clientX - dragStart.current.px) / scale;
         const dy = (me.clientY - dragStart.current.py) / scale;
+        // Any movement at all signals drag intent — arm the press visual
+        // immediately so the scale-down has time to animate before the
+        // 8px-threshold drag actually starts.
+        if (!isDraggingRef.current && (dx !== 0 || dy !== 0) && pressTimerRef.current) {
+          clearTimeout(pressTimerRef.current);
+          pressTimerRef.current = 0;
+          setIsPressed(true);
+        }
         if (!isDraggingRef.current && Math.abs(dx) + Math.abs(dy) > 8 / scale) {
           isDraggingRef.current = true;
           setIsDragging(true);
@@ -111,7 +131,12 @@ export function useCardDrag(opts: UseCardDragOptions) {
         }
         dragStart.current = null;
         isDraggingRef.current = false;
+        if (pressTimerRef.current) {
+          clearTimeout(pressTimerRef.current);
+          pressTimerRef.current = 0;
+        }
         setIsDragging(false);
+        setIsPressed(false);
         releaseSpring();
       };
 
@@ -121,5 +146,5 @@ export function useCardDrag(opts: UseCardDragOptions) {
     [applyDragVelocity, releaseSpring, tickSmooth]
   );
 
-  return { isDragging, dragRotation, handlePointerDown };
+  return { isDragging, isPressed, dragRotation, handlePointerDown };
 }

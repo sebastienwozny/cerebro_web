@@ -126,7 +126,7 @@ function NoteCard({
   const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
   const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
-  const { isDragging, dragRotation, handlePointerDown } = useCardDrag({
+  const { isDragging, isPressed, dragRotation, handlePointerDown } = useCardDrag({
     noteId: note.id,
     positionX: note.positionX,
     positionY: note.positionY,
@@ -188,6 +188,18 @@ function NoteCard({
   // hover video keeps playing during a drag as long as the cursor is on the
   // card (per product spec).
   const [cursorInside, setCursorInside] = useState(false);
+
+  // True for ~150ms whenever the user presses or releases the card. The
+  // scale 1.02→1.0 ease-out runs at the instant of click (not at the drag
+  // threshold 8px later), and the symmetric 1.0→hover ease runs on
+  // release. Off otherwise so the per-frame rotation spring during drag
+  // isn't re-interpolated by CSS.
+  const [transformEasing, setTransformEasing] = useState(false);
+  useEffect(() => {
+    setTransformEasing(true);
+    const t = setTimeout(() => setTransformEasing(false), 150);
+    return () => clearTimeout(t);
+  }, [isPressed]);
 
   // During open/close the main card div isn't rendered (shadow mode), so
   // pointerEnter/Leave never fire — cursorInside would stay stuck at whatever
@@ -274,31 +286,44 @@ function NoteCard({
           transform: isDeleting
             ? "scale(0)"
             : isDragging
-                // Drag-only exception: video cards skip rotation/scale because
-                // PVP isn't rotation-synced (it stays axis-aligned), so the
-                // card frame would rotate around a still video. Hover scale is
-                // mirrored on PVP via the isHovered prop, so it's safe there.
+                // Drag returns the card to its base size — even if it was
+                // hover-scaled the moment before drag started — so picking
+                // up feels like "lifting" out of the hover state. Video
+                // cards still skip rotation entirely (PVP isn't rotation-
+                // synced, so the card frame would rotate around a still
+                // video).
                 ? headerMedia?.type === "video"
                   ? "none"
-                  : `rotate(${rotation}deg) scale(1.02)`
+                  : `rotate(${rotation}deg)`
                 : isFollowing
                   ? headerMedia?.type === "video"
                     ? "none"
                     : `rotate(${rotation}deg)`
                   : t > 0
                     ? "none"
-                    : isHovered && !isSelected && !suppressScale && !isResizing
+                    : isHovered && !isSelected && !suppressScale && !isResizing && !isPressed
+                      // isPressed overrides hover scale so clicking drops the
+                      // card to base size immediately (with the easing window
+                      // armed by the transformEasing effect above). We use
+                      // `scale(1)` rather than `none` so CSS transitions
+                      // between the two interpolate cleanly — browsers
+                      // sometimes skip the animation when going to/from
+                      // `transform: none`.
                       ? "scale(1.02)"
-                      : "none",
+                      : "scale(1)",
           transformOrigin: isDragging || isFollowing ? "top center" : "center",
           animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
           transition: isDeleting
             ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
             : isDragging || isFollowing
-              // Transform updates every frame during drag/follow (rotation spring,
-              // drag delta); a transition would introduce lag that decouples the
-              // card from the portal-rendered video player.
-              ? "opacity 0.3s ease-out"
+              // Transform updates every frame during drag/follow (rotation
+              // spring, drag delta); a permanent transition would lag the
+              // per-frame updates. But on the very first ~150ms of drag,
+              // transformEasing lets the scale 1.02→1.0 transition smoothly
+              // before falling back to instant per-frame updates.
+              ? transformEasing
+                ? "transform 0.15s ease-out, opacity 0.3s ease-out"
+                : "opacity 0.3s ease-out"
               : t > 0
                 ? "none"
                 : isAnimating
@@ -322,9 +347,10 @@ function NoteCard({
               ? "var(--shadow-card-invisible)"
               : isSelected && openProgress < 0.1
                 ? "var(--shadow-card-selected)"
-                // Keep the hover shadow through drag/follow: dropping to rest
-                // mid-drag reads as a brightness change around the card.
-                : isHovered || isDragging || isFollowing
+                // Drag/follow drops to rest shadow to match the size reset
+                // (the card no longer reads as "hover-lifted" once you start
+                // moving it).
+                : isHovered && !isDragging && !isFollowing
                   ? "var(--shadow-card-hover)"
                   : "var(--shadow-card-rest)",
             transition: "box-shadow 0.2s ease-out",

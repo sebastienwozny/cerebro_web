@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface Params {
   isDragging: boolean;
@@ -29,15 +29,25 @@ export function useCardHover({
   const [suppressScale, setSuppressScale] = useState(false);
   const hoverCooldownRef = useRef(false);
 
-  // Clear hover when drag starts, restore pointer state when drag ends if still over card
-  useEffect(() => {
+  // Clear hover when drag starts, restore pointer state when drag ends if still over card.
+  // Uses useLayoutEffect so the post-drag cooldown is armed BEFORE the browser
+  // fires its synthetic mouseenter at the card's reset position.
+  useLayoutEffect(() => {
     if (isDragging) {
       setIsHovered(false);
       setSuppressScale(true);
+      hoverCooldownRef.current = true;
     } else {
       if (cardRef.current?.matches(":hover")) {
         setIsPointerOver(true);
       }
+      // Keep the cooldown for ~250ms after drag end so the synthetic
+      // onMouseEnter that the browser fires right after pointerup doesn't
+      // snap straight back into the hover scale + shadow. Hover only
+      // re-engages when the user actually moves out and back in.
+      hoverCooldownRef.current = true;
+      const timer = setTimeout(() => { hoverCooldownRef.current = false; }, 250);
+      return () => clearTimeout(timer);
     }
   }, [isDragging]);
 
