@@ -258,10 +258,11 @@ function NoteCard({
         ref={cardRef}
         className="absolute select-none pointer-events-auto"
         style={{
-          // CSS containment: tells the browser the card's children don't
-          // affect outside layout/paint/style. Lets the compositor skip work
-          // for unrelated cards and unblocks more aggressive layer caching.
-          contain: "layout style paint",
+          // CSS containment: layout + style only (no `paint` — that would
+          // clip the card's drop shadow at its bounds). Tells the browser
+          // the card's children won't affect outside layout/style, so the
+          // compositor can skip work for unrelated cards.
+          contain: "layout style",
           left: visualLeft,
           top: visualTop,
           width: visualWidth,
