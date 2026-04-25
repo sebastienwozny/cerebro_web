@@ -262,6 +262,9 @@ function NoteCard({
           // clip the card's drop shadow at its bounds). Tells the browser
           // the card's children won't affect outside layout/style, so the
           // compositor can skip work for unrelated cards.
+          // (We avoid `content-visibility: auto` for the same reason — it
+          // implies paint containment and clips the shadow. The JS cull in
+          // Canvas.tsx already covers off-screen pruning.)
           contain: "layout style",
           left: visualLeft,
           top: visualTop,

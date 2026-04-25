@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, startTransition } from "react";
 import { MIN_SCALE, MAX_SCALE, ZOOM_SENSITIVITY } from "../constants";
 
 export interface CanvasTransform {
@@ -36,7 +36,10 @@ export function useCanvas() {
     if (!rafRef.current) {
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
-        setTransformVersion(v => v + 1);
+        // Mark the pan/zoom-driven re-render as a transition so React 18
+        // can interrupt it for higher-priority work (text input, hover,
+        // selection updates). Keeps urgent UI snappy under heavy load.
+        startTransition(() => setTransformVersion(v => v + 1));
       });
     }
   }, []);
