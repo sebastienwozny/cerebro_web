@@ -41,6 +41,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // effect cycle can't revoke them out from under the editor.
   const videoBlobsRef = useRef<Map<string, Blob>>(new Map());
   const videoUrlsRef = useRef<Map<string, string>>(new Map());
+  // Debounce timer for the editor's onUpdate save. Cleared+flushed on unmount.
+  const saveTimerRef = useRef<number | null>(null);
   for (const b of blocks) {
     if (b.type === "video" && b.videoBlob && !videoBlobsRef.current.has(b.id)) {
       videoBlobsRef.current.set(b.id, b.videoBlob);
@@ -76,6 +78,22 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // can reach the latest version without recreating the editor.
   const enterLinkModeRef = useRef<() => void>(() => {});
   const linkOnSelectionChangeRef = useRef<(isLinkActive: boolean) => void>(() => {});
+
+  // Flush any pending debounced save when the editor unmounts (card closes)
+  // so the last keystrokes aren't lost.
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) {
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+        if (editorRef.current) {
+          onUpdate(htmlToBlocks(editorRef.current, videoBlobsRef.current));
+        }
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const editorRef = useRef<ReturnType<typeof useEditor> | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -134,7 +152,14 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     content: initialHtml.current,
     editable,
     onUpdate: ({ editor }) => {
-      onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>, videoBlobsRef.current));
+      // Debounced save: keystrokes batch into a single Dexie write. Without
+      // this, every key fires htmlToBlocks + db.notes.update, which makes
+      // useLiveQuery re-fetch every note (blobs included) on each keystroke.
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>, videoBlobsRef.current));
+      }, 250);
     },
     onSelectionUpdate: ({ editor }) => {
       // Don't show the style toolbar for NodeSelection — that's what the
@@ -261,6 +286,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       },
     },
   });
+  editorRef.current = editor;
 
   async function insertImageFromFile(file: File) {
     if (!editor) return;

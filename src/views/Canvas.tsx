@@ -16,7 +16,8 @@ import gsap from "gsap";
 import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
 import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
 import NoteCard from "../components/NoteCard";
-import NoteEditor from "../components/NoteEditor";
+import { lazy, Suspense } from "react";
+const NoteEditor = lazy(() => import("../components/NoteEditor"));
 import NotePreview from "../components/NotePreview";
 import ContextMenu, { MOD, type MenuItem } from "../components/ContextMenu";
 import {
@@ -47,14 +48,16 @@ function OpenCardContent({
   }, [openProgress, editorReady]);
   if (!editorReady) return null;
   return (
-    <NoteEditor
-      blocks={note.blocks}
-      onUpdate={(blocks) => {
-        const title = blocks.find(b => b.type !== "image" && b.type !== "video")?.content ?? "";
-        updateNote(note.id, { blocks, title });
-      }}
-      editable={openProgress >= 1}
-    />
+    <Suspense fallback={null}>
+      <NoteEditor
+        blocks={note.blocks}
+        onUpdate={(blocks) => {
+          const title = blocks.find(b => b.type !== "image" && b.type !== "video")?.content ?? "";
+          updateNote(note.id, { blocks, title });
+        }}
+        editable={openProgress >= 1}
+      />
+    </Suspense>
   );
 }
 

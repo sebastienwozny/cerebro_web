@@ -6,6 +6,7 @@ import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
+import gsap from "gsap";
 
 /**
  * Pre-warm Dexie (IndexedDB), TipTap (ProseMirror schema compilation),
@@ -40,10 +41,9 @@ export function warmup() {
       el.remove();
     });
 
-    // 3. Pre-warm GSAP by running a throwaway tween
-    import("gsap").then(({ default: gsap }) => {
-      const dummy = { v: 0 };
-      gsap.to(dummy, { v: 1, duration: 0.01 });
-    });
+    // 3. Pre-warm GSAP by running a throwaway tween (gsap is already in the
+    // main chunk via Canvas.tsx, so no extra fetch).
+    const dummy = { v: 0 };
+    gsap.to(dummy, { v: 1, duration: 0.01 });
   });
 }

@@ -592,4 +592,20 @@ function NoteCard({
   );
 }
 
-export default React.memo(NoteCard);
+// Custom propsAreEqual: shallow compare every prop EXCEPT `children`. The
+// caller passes a fresh JSX element for `children` on every parent render
+// (e.g. <NotePreview blocks={note.blocks} />) so naive React.memo always
+// rebuilds, defeating its purpose. Since the rendered children content is a
+// pure function of `note.blocks` (already covered by the `note` prop's
+// shallow compare), skipping children's identity check is safe and lets
+// memo hold for unrelated parent re-renders (pan, zoom, hover).
+function notePropsEqual(prev: Props, next: Props): boolean {
+  const keys = new Set<keyof Props>([...Object.keys(prev), ...Object.keys(next)] as Array<keyof Props>);
+  for (const k of keys) {
+    if (k === "children") continue;
+    if (!Object.is(prev[k], next[k])) return false;
+  }
+  return true;
+}
+
+export default React.memo(NoteCard, notePropsEqual);
