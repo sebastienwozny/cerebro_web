@@ -27,6 +27,8 @@ import FormatToolbar from "./FormatToolbar";
 import MediaToolbar from "./MediaToolbar";
 import PlusMenu from "./PlusMenu";
 import BlockMenu from "./BlockMenu";
+import { v4 as uuidv4 } from "uuid";
+import { setMediaClipboard, clearMediaClipboard } from "../store/mediaClipboard";
 
 interface Props {
   blocks: NoteBlock[];
@@ -629,9 +631,40 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!editor) return;
     const target = getTargetBlock();
     if (!target) return;
-    const dom = DOMSerializer.fromSchema(editor.schema).serializeNode(target.node) as HTMLElement;
+    const { node } = target;
+    // For image/video, also stash a NoteBlock in the in-memory media clipboard
+    // so Cmd+V on the canvas can create a new card with this media as header.
+    if (node.type.name === "image") {
+      const src = node.attrs.src as string | null;
+      if (src && src.startsWith("data:")) {
+        setMediaClipboard({
+          id: uuidv4(),
+          type: "image",
+          content: "",
+          imageDataUrl: src,
+          imageAspect: (node.attrs.aspect as number | null) ?? 1,
+        });
+      }
+    } else if (node.type.name === "video") {
+      const blockId = node.attrs.blockId as string | null;
+      const blob = blockId ? videoBlobsRef.current.get(blockId) : null;
+      if (blob) {
+        setMediaClipboard({
+          id: uuidv4(),
+          type: "video",
+          content: "",
+          videoBlob: blob,
+          videoPosterDataUrl: (node.attrs.poster as string | undefined) ?? "",
+          videoAspect: (node.attrs.aspect as number | null) ?? 1,
+          videoMimeType: (node.attrs.mimeType as string | undefined) ?? "video/mp4",
+        });
+      }
+    } else {
+      clearMediaClipboard();
+    }
+    const dom = DOMSerializer.fromSchema(editor.schema).serializeNode(node) as HTMLElement;
     const html = dom.outerHTML;
-    const text = target.node.textContent;
+    const text = node.textContent;
     if (typeof ClipboardItem !== "undefined") {
       const item = new ClipboardItem({
         "text/html": new Blob([html], { type: "text/html" }),

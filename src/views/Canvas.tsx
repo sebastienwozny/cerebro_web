@@ -11,6 +11,7 @@ import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import { useWindowSize } from "../hooks/useWindowSize";
 import { useCanvasMediaImport } from "../hooks/useCanvasMediaImport";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
+import { getMediaClipboard } from "../store/mediaClipboard";
 import gsap from "gsap";
 import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
 import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
@@ -296,6 +297,22 @@ export default function Canvas() {
 
   // Paste cards from clipboard at viewport center
   const pasteClipboard = useCallback(async () => {
+    // First check the media clipboard — populated by the editor when the user
+    // copies an image or video from a card. Pastes as a brand-new card with
+    // the media as its header.
+    const mediaBlock = getMediaClipboard();
+    if (mediaBlock) {
+      const t = getTransform();
+      const spread = 40;
+      const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+      const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+      const fresh: NoteBlock = { ...mediaBlock, id: crypto.randomUUID() };
+      const noteId = crypto.randomUUID();
+      triggerPop([noteId]);
+      undoStack.record({ type: "create", noteIds: [noteId] });
+      await addNote(canvasX, canvasY, noteId, fresh);
+      return;
+    }
     const source = clipboardRef.current;
     if (source.length === 0) return;
     const t = getTransform();
@@ -323,7 +340,7 @@ export default function Canvas() {
     undoStack.record({ type: "create", noteIds: createdIds });
     triggerPop(createdIds);
     setSelectedIds(new Set(createdIds));
-  }, [notes, duplicateNote, triggerPop, setSelectedIds, getTransform]);
+  }, [notes, duplicateNote, triggerPop, setSelectedIds, getTransform, addNote]);
 
   useKeyboardShortcuts({
     notes, canvasLocked, selectedIds, setSelectedIds, setDeletingIds,
