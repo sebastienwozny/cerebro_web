@@ -4,7 +4,6 @@ import StarterKit from "@tiptap/starter-kit";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import Image from "@tiptap/extension-image";
-import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
 import gsap from "gsap";
 
@@ -31,7 +30,6 @@ export function warmup() {
         TaskList,
         TaskItem.configure({ nested: false }),
         Image,
-        Underline,
       ],
       content: "<p>warm</p>",
     });

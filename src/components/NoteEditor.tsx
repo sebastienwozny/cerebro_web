@@ -7,7 +7,6 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
-import Underline from "@tiptap/extension-underline";
 import GlobalDragHandle from "tiptap-extension-global-drag-handle";
 import AutoJoiner from "tiptap-extension-auto-joiner";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -121,7 +120,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       TaskItem.configure({ nested: false }),
       ImageWithAspect.configure({ inline: false, allowBase64: true }),
       VideoBlock,
-      Underline,
       GlobalDragHandle.configure({
         dragHandleWidth: 36,
         scrollTreshold: 100,
@@ -403,7 +401,12 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // Click below content to insert empty lines
   useEffect(() => {
     if (!editor || !editable) return;
-    const overlay = editor.view.dom.closest("[data-editor-overlay]");
+    // editor.view is a getter that throws if the view isn't mounted yet —
+    // happens in StrictMode dev where the effect re-runs after a cleanup
+    // before EditorContent has had a chance to re-attach the view.
+    let tiptapDom: HTMLElement;
+    try { tiptapDom = editor.view.dom as HTMLElement; } catch { return; }
+    const overlay = tiptapDom.closest("[data-editor-overlay]");
     if (!overlay) return;
 
     // Track whether mousedown started inside the editor text area
@@ -541,7 +544,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     if (!handlePos || menuPosFrozen.current) return;
     const el = plusMenuRef.current;
     if (!el) return;
-    const overlay = editor?.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+    let overlay: HTMLElement | null = null;
+    try { overlay = (editor?.view.dom as HTMLElement | undefined)?.closest("[data-editor-overlay]") as HTMLElement | null ?? null; } catch { /* view not mounted */ }
     const scrollTop = overlay?.scrollTop ?? 0;
     const h = el.offsetHeight;
     const viewportH = window.innerHeight;
@@ -573,7 +577,10 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     let removeListener: (() => void) | null = null;
     const attach = () => {
       if (cancelled) return;
-      const parent = editor.view.dom.parentElement;
+      // editor.view throws if the view isn't mounted yet; retry next frame.
+      let parent: HTMLElement | null;
+      try { parent = (editor.view.dom as HTMLElement).parentElement; }
+      catch { requestAnimationFrame(attach); return; }
       const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
       if (!dragEl) { requestAnimationFrame(attach); return; }
       const onClick = (e: MouseEvent) => {
@@ -912,7 +919,8 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           position:absolute in document-space. The browser then handles scroll
           tracking natively with zero JS lag. */}
       {editable && showPlusMenu && handlePos && (() => {
-        const overlay = editor?.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+        let overlay: HTMLElement | null = null;
+        try { overlay = (editor?.view.dom as HTMLElement | undefined)?.closest("[data-editor-overlay]") as HTMLElement | null ?? null; } catch { /* view not mounted */ }
         if (!overlay) return null;
         const pos = frozenMenuPos ?? { contentLeft: handlePos.contentLeft, lineBottom: handlePos.lineBottom + overlay.scrollTop, lineH: handlePos.lineH };
         return createPortal(

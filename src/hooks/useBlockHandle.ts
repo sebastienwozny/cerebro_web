@@ -40,7 +40,9 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
   // task items.
   useEffect(() => {
     if (!editor || !editable) return;
-    const tiptap = editor.view.dom as HTMLElement;
+    // editor.view throws if the view isn't mounted yet (StrictMode dev cycle).
+    let tiptap: HTMLElement;
+    try { tiptap = editor.view.dom as HTMLElement; } catch { return; }
 
     const computeFromBlock = (found: HTMLElement) => {
       const cs = getComputedStyle(found);
@@ -199,7 +201,9 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
   // the user has a text selection (so the format toolbar isn't fighting for
   // attention with the block handles).
   useEffect(() => {
-    const parent = editor?.view.dom.parentElement;
+    if (!editor) return;
+    let parent: HTMLElement | null;
+    try { parent = (editor.view.dom as HTMLElement).parentElement; } catch { return; }
     const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
     if (!dragEl) return;
     if (showPlusMenu || hasSelection) {
@@ -220,7 +224,9 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
   const resetHandles = useCallback(() => {
     setHandlePos(null);
     hoveredBlockRef.current = null;
-    const parent = editor?.view.dom.parentElement;
+    if (!editor) return;
+    let parent: HTMLElement | null;
+    try { parent = (editor.view.dom as HTMLElement).parentElement; } catch { return; }
     const dragEl = parent?.querySelector(".drag-handle[data-drag-handle]") as HTMLElement | null;
     dragEl?.classList.add("hide");
   }, [editor]);
@@ -241,7 +247,8 @@ export function useBlockHandle({ editor, editable, showPlusMenu, showBlockMenu, 
   // position (and the `hide` class) as the cursor moves across blocks.
   useEffect(() => {
     if (!editor || !showBlockMenu) return;
-    const tiptap = editor.view.dom as HTMLElement;
+    let tiptap: HTMLElement;
+    try { tiptap = editor.view.dom as HTMLElement; } catch { return; }
     const prev = tiptap.style.pointerEvents;
     tiptap.style.pointerEvents = "none";
     return () => {

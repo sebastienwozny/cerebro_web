@@ -37,7 +37,12 @@ export function useEditorDragScroll(editor: Editor | null, editable: boolean) {
 
   useEffect(() => {
     if (!editor || !editable) return;
-    const overlay = editor.view.dom.closest("[data-editor-overlay]") as HTMLElement | null;
+    // editor.view is a getter that throws if the view isn't mounted yet —
+    // happens in StrictMode dev where the effect re-runs after a cleanup
+    // before EditorContent has had a chance to re-attach the view.
+    let dom: HTMLElement;
+    try { dom = editor.view.dom; } catch { return; }
+    const overlay = dom.closest("[data-editor-overlay]") as HTMLElement | null;
     if (!overlay) return;
     const THRESHOLD = 120;
     const MAX_SPEED = 18;
