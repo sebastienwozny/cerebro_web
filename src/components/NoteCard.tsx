@@ -284,6 +284,14 @@ function NoteCard({
           transformOrigin: "top left",
           transform: `translate3d(var(--pan-x, 0px), var(--pan-y, 0px), 0) scale(var(--zoom, 1)) translate3d(${visualLeft}px, ${visualTop}px, 0)`,
           zIndex: openProgress > 0 && !isShadowInstance ? "var(--z-card-open)" : note.zOrder,
+          // Position is encoded in this div's transform (via CSS-var pan/zoom
+          // composition + visualLeft/Top). Animate transform during undo so
+          // the card slides to its restored position in lockstep with its
+          // PVP (which has its own matching transition). Without this, the
+          // card teleports while the PVP slides — looks like a duplicate.
+          transition: isAnimating && t === 0 && !isDragging && !isFollowing
+            ? "transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)"
+            : undefined,
         }}
       >
       <div
@@ -341,9 +349,7 @@ function NoteCard({
                 : "opacity 0.3s ease-out"
               : t > 0
                 ? "none"
-                : isAnimating
-                  ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1), transform 0.15s ease-out"
-                  : "transform 0.15s ease-out",
+                : "transform 0.15s ease-out",
         }}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}

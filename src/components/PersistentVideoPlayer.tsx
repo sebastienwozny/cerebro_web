@@ -402,18 +402,13 @@ function PersistentVideoPlayerImpl({
         zIndex,
         pointerEvents,
         borderRadius: radius,
-        // Compose the delete scale(0) on top of the position transform so the
-        // PVP shrinks at its on-canvas location, not at the canvas origin.
-        transform: isDeleting
-          ? `${outerPositionStyle.transform ?? ""} scale(0)`
-          : (outerPositionStyle.transform ?? "none"),
-        transition: isDeleting ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)" : (outerPositionStyle.transition ?? "none"),
       }}
     >
-      {/* Inner div: hover scale + pop-in animation. popIn lives here (not on
-          the outer) because the outer's transform encodes canvas position via
-          CSS-var composition — letting the keyframe override that transform
-          would teleport the PVP to the canvas origin during the animation. */}
+      {/* Inner div: hover scale, pop-in animation, and delete scale-down all
+          live here. The outer's transform encodes canvas position via CSS-var
+          composition with `transform-origin: top left` — applying scale(0) or
+          a popIn keyframe on it would shrink toward the canvas origin (top-
+          left), not the card's center. */}
       <div
         ref={innerRef}
         style={{
@@ -422,10 +417,14 @@ function PersistentVideoPlayerImpl({
           // `scale(1.02)` on hover mirrors the NoteCard hover. The pre-applied
           // translateZ(0) keeps the layer GPU-stable so the scale is a pure
           // compositor op (no texture resample of the video).
-          transform: isHovered ? "translateZ(0) scale(1.02)" : "translateZ(0)",
+          transform: isDeleting
+            ? "translateZ(0) scale(0)"
+            : isHovered ? "translateZ(0) scale(1.02)" : "translateZ(0)",
           transformOrigin: "center",
           willChange: "transform",
-          transition: transformTransition ? "transform 0.15s ease-out" : "none",
+          transition: isDeleting
+            ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
+            : transformTransition ? "transform 0.15s ease-out" : "none",
           borderRadius: radius,
           overflow: "hidden",
           position: "relative",
