@@ -353,7 +353,7 @@ function NoteCard({
         }}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        onPointerEnter={() => { if (!isDragging && !isResizing) setCursorInside(true); }}
+        onPointerEnter={() => { if (!isDragging && !isResizing && !hoverSuppressed) setCursorInside(true); }}
         onPointerLeave={(e) => { if (!isDragging && !isResizing) { const r = cardRef.current?.getBoundingClientRect(); if (r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) return; setCursorInside(false); } }}
       >
         {/* Clipped card content */}

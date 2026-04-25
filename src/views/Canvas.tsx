@@ -101,6 +101,10 @@ export default function Canvas() {
   // Group drag state
   const [groupDragDelta, setGroupDragDelta] = useState({ dx: 0, dy: 0 });
   const [groupDragRotation, setGroupDragRotation] = useState(0);
+  // True from drag-start through drag-end. Used to suppress hover on
+  // *other* cards while one is being dragged (the dragged card sweeps over
+  // them and would otherwise trigger their mouseenter scale/shadow).
+  const [isAnyCardDragging, setIsAnyCardDragging] = useState(false);
   const groupDragDeltaRef = useRef({ dx: 0, dy: 0 });
   const groupDragRafRef = useRef(0);
   // Resize override — visual-only scale/position while the user is resizing a
@@ -424,6 +428,7 @@ export default function Canvas() {
       groupDragStartRef.current = starts;
       groupDragDeltaRef.current = { dx: 0, dy: 0 };
       setGroupDragDelta({ dx: 0, dy: 0 });
+      setIsAnyCardDragging(true);
     },
     [selectedIds, notes]
   );
@@ -485,6 +490,7 @@ export default function Canvas() {
       groupDragDeltaRef.current = { dx: 0, dy: 0 };
       dragDuplicateIdsRef.current = [];
       setGroupDragDelta({ dx: 0, dy: 0 });
+      setIsAnyCardDragging(false);
     },
     [updateNote]
   );
@@ -785,7 +791,7 @@ export default function Canvas() {
                 isClosing={isVideoOpening ? isClosing : false}
                 closingScrollOffset={isVideoOpening ? closingScrollOffset : 0}
                 isShadowInstance={isVideoOpening}
-                hoverSuppressed={marquee !== null || openNoteId !== null}
+                hoverSuppressed={marquee !== null || openNoteId !== null || (isAnyCardDragging && !inGroupDrag)}
                 spaceHeld={spaceHeld}
                 groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
                 groupDragRotation={inGroupDrag ? groupDragRotation : 0}
