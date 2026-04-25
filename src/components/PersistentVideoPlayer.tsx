@@ -103,15 +103,13 @@ function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
     v.playsInline = true;
     v.muted = true;
     v.preload = "auto";
-    // opacity:0 + transition: video stays invisible while paused so the
-    // poster <img> behind it shows through, then fades to 1 over 200ms when
-    // playing. This cross-fades hover into the playing video without a hard
-    // cut. (Note: the rest/hover rendering on the canvas-layer goes through
-    // a compositor path that bypasses macOS color management on wide-gamut
-    // displays — opening the card switches to the natural color-managed
-    // path. Forcing color management here via filter() over-saturates and
-    // an architectural fix would require restructuring the canvas transform.)
-    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity 0.2s ease-out";
+    // Always visible: the video element shows its first frame at currentTime=0
+    // when paused, and that frame goes through the same color-managed video
+    // pipeline as the playing state. Using a poster <img> as the resting
+    // visual produced a brightness mismatch on wide-gamut macOS displays
+    // (img bypasses color management on transformed parents, video doesn't),
+    // so the rest→hover transition was visibly non-fluid.
+    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block";
     videoElementCache.set(blockId, v);
   }
   return v;
@@ -149,10 +147,6 @@ function PersistentVideoPlayerImpl({
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    // Cross-fade poster ↔ video: video is invisible at rest (so the lighter
-    // poster shows through), fades to opacity 1 when playing (revealing the
-    // color-managed darker video).
-    v.style.opacity = playing ? "1" : "0";
     if (playing) {
       v.play().catch(() => {});
     } else {
@@ -414,13 +408,12 @@ function PersistentVideoPlayerImpl({
           ? `${outerPositionStyle.transform ?? ""} scale(0)`
           : (outerPositionStyle.transform ?? "none"),
         transition: isDeleting ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)" : (outerPositionStyle.transition ?? "none"),
-        animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
       }}
     >
-      {/* Inner div: hover scale only, on its own stable GPU layer so the
-          video compositor stays on the color-managed path across all states.
-          The <video> element is appended here imperatively by useLayoutEffect
-          so it survives portal container changes without recreation. */}
+      {/* Inner div: hover scale + pop-in animation. popIn lives here (not on
+          the outer) because the outer's transform encodes canvas position via
+          CSS-var composition — letting the keyframe override that transform
+          would teleport the PVP to the canvas origin during the animation. */}
       <div
         ref={innerRef}
         style={{
@@ -436,6 +429,7 @@ function PersistentVideoPlayerImpl({
           borderRadius: radius,
           overflow: "hidden",
           position: "relative",
+          animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
         }}
       >
         <img

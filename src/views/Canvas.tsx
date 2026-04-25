@@ -712,17 +712,24 @@ export default function Canvas() {
         document.body
       )}
 
-      {/* Canvas layer — pure positioning anchor at window center. NO
-          transform: pan/zoom are applied per-card via CSS variables
-          (--pan-x, --pan-y, --zoom) inherited from this element. Without a
-          parent transform, cards and PVPs share the body stacking context
-          so a dragged card can lift above other cards' video PVPs. */}
+      {/* Canvas layer — positioning anchor at window center. Pan/zoom are
+          applied per-card via CSS variables (--pan-x, --pan-y, --zoom)
+          inherited from this element, NOT via a transform on this layer.
+          Opacity is tied to `1 - openProgress` so canvas content fades out
+          while the body backdrop fades in (and reverses on close). This
+          avoids relying on stacking-context isolation to cover canvas-rest
+          PVPs/cards — `note.zOrder` is unbounded via repeated `bringToFront`,
+          and Chrome's compositor doesn't reliably trap PVP descendants
+          behind a parent SC, so cards with high zOrder leaked above the
+          backdrop. The opacity cross-fade is structural: there's nothing
+          to leak when the layer itself is invisible. */}
       <div
         ref={layerRef}
         className="absolute"
         style={{
           left: windowSize.w / 2,
           top: windowSize.h / 2,
+          opacity: 1 - openProgress,
         }}
       >
         {notes.map((note) => {
