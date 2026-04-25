@@ -258,6 +258,10 @@ function NoteCard({
         ref={cardRef}
         className="absolute select-none pointer-events-auto"
         style={{
+          // CSS containment: tells the browser the card's children don't
+          // affect outside layout/paint/style. Lets the compositor skip work
+          // for unrelated cards and unblocks more aggressive layer caching.
+          contain: "layout style paint",
           left: visualLeft,
           top: visualTop,
           width: visualWidth,
@@ -365,6 +369,7 @@ function NoteCard({
                 objectFit: "cover",
               }}
               draggable={false}
+              decoding="async"
             />
           )}
           {/* Card's own poster — shown only at rest (no PVP mounted). When
@@ -384,6 +389,7 @@ function NoteCard({
                 objectFit: "cover",
               }}
               draggable={false}
+              decoding="async"
             />
           )}
 
@@ -500,6 +506,7 @@ function NoteCard({
               borderRadius: lerp(cardRadius * scale, 6, t),
             }}
             draggable={false}
+            decoding="async"
           />,
           document.body,
         );

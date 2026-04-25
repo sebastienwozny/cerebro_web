@@ -135,7 +135,7 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
     const c = b.content;
     if (b.type === "image") {
       if (b.imageDataUrl) {
-        parts.push(`<img src="${b.imageDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
+        parts.push(`<img src="${b.imageDataUrl}" alt="" decoding="async" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
       }
       i++;
     } else if (b.type === "video") {
@@ -143,7 +143,7 @@ export function blocksToPreviewHtml(blocks: NoteBlock[]): string {
       // header (when the video is first) is handled by a dedicated React
       // component in NotePreview for hover-to-play.
       if (b.videoPosterDataUrl) {
-        parts.push(`<img src="${b.videoPosterDataUrl}" alt="" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
+        parts.push(`<img src="${b.videoPosterDataUrl}" alt="" decoding="async" style="width:100%;display:block;border-radius:8px;margin:8px 0" />`);
       }
       i++;
     } else if (b.type === "bulletList" || b.type === "orderedList") {
