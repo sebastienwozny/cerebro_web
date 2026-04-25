@@ -266,9 +266,29 @@ function NoteCard({
   return (
     <>
       {!isShadowInstance && (
+      // Positioner: handles canvas pan/zoom + this card's canvas position
+      // via the --pan-x/--pan-y/--zoom CSS variables inherited from the
+      // canvas layer. transform-origin top-left so scale(--zoom) zooms
+      // positions outward from the canvas origin, not from the card's
+      // own center. The inner div below keeps its own transforms
+      // (rotate during drag, scale on hover, etc.) with their own
+      // transform-origin — splitting these into two divs keeps the
+      // origins independent.
+      <div
+        className="absolute"
+        style={{
+          left: 0,
+          top: 0,
+          width: visualWidth,
+          height: t > 0 ? visualHeight : cardH,
+          transformOrigin: "top left",
+          transform: `translate3d(var(--pan-x, 0px), var(--pan-y, 0px), 0) scale(var(--zoom, 1)) translate3d(${visualLeft}px, ${visualTop}px, 0)`,
+          zIndex: openProgress > 0 && !isShadowInstance ? "var(--z-card-open)" : note.zOrder,
+        }}
+      >
       <div
         ref={cardRef}
-        className="absolute select-none pointer-events-auto"
+        className="absolute inset-0 select-none pointer-events-auto"
         style={{
           // CSS containment: layout + style only (no `paint` — that would
           // clip the card's drop shadow at its bounds). Tells the browser
@@ -278,11 +298,6 @@ function NoteCard({
           // implies paint containment and clips the shadow. The JS cull in
           // Canvas.tsx already covers off-screen pruning.)
           contain: "layout style",
-          left: visualLeft,
-          top: visualTop,
-          width: visualWidth,
-          height: t > 0 ? visualHeight : cardH,
-          zIndex: openProgress > 0 && !isShadowInstance ? "var(--z-card-open)" : note.zOrder,
           transform: isDeleting
             ? "scale(0)"
             : isDragging
@@ -462,6 +477,7 @@ function NoteCard({
             Video cards render them via PVP so they sit above the video. */}
         {!isVideoCard && cornerOverlay}
       </div>
+      </div>
       )}
 
       {/* Back button */}
@@ -604,7 +620,12 @@ function NoteCard({
             editorScrollY={0}
             playing={playing}
             unlocked={unlocked}
-            zIndex="var(--z-editor-controls)"
+            // Canvas-rest: match this note's zOrder so the PVP competes
+            // with cards on equal footing (a dragged card with bumped
+            // zOrder visually pulls above other cards' PVPs). When
+            // animating to/from open (portalToBody), lift to the editor
+            // controls layer so the video sits above the body backdrop.
+            zIndex={portalToBody ? "var(--z-editor-controls)" : note.zOrder}
             portalToBody={portalToBody}
             animateLeftTop={!!isAnimating && !isDragging && !isFollowing && t === 0}
             isSelected={isSelected && openProgress < 0.1}

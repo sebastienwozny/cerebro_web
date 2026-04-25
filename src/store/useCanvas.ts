@@ -48,10 +48,17 @@ export function useCanvas() {
     const el = layerRef.current;
     if (!el) return;
     const { offsetX, offsetY, scale } = transformRef.current;
-    const t = `translate3d(${offsetX}px, ${offsetY}px, 0) scale(${scale})`;
-    el.style.transform = t;
-    const pvpRoot = document.getElementById("pvp-portal-root");
-    if (pvpRoot) pvpRoot.style.transform = t;
+    // Expose pan/zoom as CSS vars instead of applying a transform on the
+    // canvas layer itself. A `transform` on the parent would create a
+    // stacking context that traps every descendant's z-index — preventing
+    // dragged cards from lifting above e.g. video PVPs. By keeping the
+    // canvas layer transform-free, cards and PVPs share the body stacking
+    // context and their `note.zOrder` z-indices compete naturally. Each
+    // card composes these CSS vars into its own transform to apply
+    // pan/zoom to its position.
+    el.style.setProperty("--pan-x", `${offsetX}px`);
+    el.style.setProperty("--pan-y", `${offsetY}px`);
+    el.style.setProperty("--zoom", `${scale}`);
     scheduleRerender();
   }, [scheduleRerender]);
 

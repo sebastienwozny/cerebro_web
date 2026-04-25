@@ -25,7 +25,11 @@
   --z-toolbar: 10002;
   --z-context-menu: 10003;
   --z-plus-menu: 10005;
-  --z-fab: 100;
+  /* FAB sits above any card zOrder. (Was 100, valid only when cards lived
+     inside the canvas-layer's transform stacking context. Without that
+     trap, cards now compete in body's stacking context up to whatever
+     zOrder bringToFront has reached.) */
+  --z-fab: 9989;
 
   /* ── Card shadows ── */
   --shadow-card-invisible: 0 10px 20px -12px rgba(0, 0, 0, 0), 0 32px 40px -8px rgba(0, 0, 0, 0);

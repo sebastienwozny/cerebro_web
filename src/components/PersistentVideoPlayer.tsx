@@ -365,16 +365,19 @@ function PersistentVideoPlayerImpl({
       };
     }
   } else {
-    // Rest / canvas-space mode. Positioned via left/top inside pvp-portal-root
-    // which lives in the scaled canvas layer, so pan/zoom are handled by the
-    // layer's transform — no per-frame React work and no pan-lag between card
-    // and PVP. Matches the card's post-drag/undo spring via `animateLeftTop`.
+    // Rest / canvas-space mode. The canvas layer no longer applies a transform
+    // (would create a stacking trap) — instead it exposes pan/zoom as
+    // --pan-x / --pan-y / --zoom CSS variables that we compose into our own
+    // transform here. transform-origin top-left so scale(--zoom) stretches
+    // positions away from the canvas origin rather than the PVP's center.
     outerPositionStyle = {
       position: "absolute",
-      left: canvasRect.left,
-      top: canvasRect.top,
+      left: 0,
+      top: 0,
+      transformOrigin: "top left",
+      transform: `translate3d(var(--pan-x, 0px), var(--pan-y, 0px), 0) scale(var(--zoom, 1)) translate3d(${canvasRect.left}px, ${canvasRect.top}px, 0)`,
       transition: animateLeftTop
-        ? "left 0.35s cubic-bezier(0.25, 1, 0.5, 1), top 0.35s cubic-bezier(0.25, 1, 0.5, 1)"
+        ? "transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)"
         : "none",
     };
   }
@@ -405,7 +408,11 @@ function PersistentVideoPlayerImpl({
         zIndex,
         pointerEvents,
         borderRadius: radius,
-        transform: isDeleting ? "scale(0)" : (outerPositionStyle.transform ?? "none"),
+        // Compose the delete scale(0) on top of the position transform so the
+        // PVP shrinks at its on-canvas location, not at the canvas origin.
+        transform: isDeleting
+          ? `${outerPositionStyle.transform ?? ""} scale(0)`
+          : (outerPositionStyle.transform ?? "none"),
         transition: isDeleting ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)" : (outerPositionStyle.transition ?? "none"),
         animation: isPopping ? "popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards" : undefined,
       }}

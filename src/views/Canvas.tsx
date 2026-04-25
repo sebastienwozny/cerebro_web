@@ -114,7 +114,7 @@ export default function Canvas() {
   const leadStartRef = useRef<{ x: number; y: number } | null>(null);
   const dragDuplicateIdsRef = useRef<string[]>([]);
 
-  // Initialize both canvas layer and pvp-portal-root transforms before first paint.
+  // Set canvas-layer's pan/zoom CSS variables before first paint.
   useLayoutEffect(() => { applyTransform(); }, [applyTransform]);
 
   // Keep notes ref current for undo/redo
@@ -702,8 +702,8 @@ export default function Canvas() {
         />
       )}
 
-      {/* Backdrop portaled to document.body — bypasses all canvas stacking
-          contexts and reliably covers pvp-portal-root (z:9997) at z:9998. */}
+      {/* Backdrop portaled to document.body — bypasses canvas-layer to
+          reliably cover the entire canvas at z:9998. */}
       {openProgress > 0 && createPortal(
         <div
           className="fixed inset-0 pointer-events-none bg-card-open"
@@ -712,12 +712,14 @@ export default function Canvas() {
         document.body
       )}
 
-      {/* Canvas layer — transform creates a stacking context that traps all
-          internal z-indices (cards, PVPs) below the backdrop (z:9998) and
-          opening card (z:9999) in the root stacking context. */}
+      {/* Canvas layer — pure positioning anchor at window center. NO
+          transform: pan/zoom are applied per-card via CSS variables
+          (--pan-x, --pan-y, --zoom) inherited from this element. Without a
+          parent transform, cards and PVPs share the body stacking context
+          so a dragged card can lift above other cards' video PVPs. */}
       <div
         ref={layerRef}
-        className="absolute origin-top-left"
+        className="absolute"
         style={{
           left: windowSize.w / 2,
           top: windowSize.h / 2,
@@ -797,30 +799,17 @@ export default function Canvas() {
             </div>
           );
         })}
+        {/* PVP portal root — sibling of cards inside the canvas layer, after
+            them in DOM so PVPs paint above same-z cards. display: contents
+            removes this wrapper from layout/stacking entirely so PVPs portaled
+            into it participate directly in canvas-layer's stacking context
+            (which is body's, since the layer no longer has a transform).
+            Their note.zOrder z-indices then compete with cards on equal
+            footing — a dragged card with bumped zOrder pulls above other
+            cards' PVPs, and vice-versa. */}
+        <div id="pvp-portal-root" style={{ display: "contents" }} />
       </div>
 
-      {/* PVP portal root — in document.body so the canvas transform sync can
-          position it identically to the canvas layer. backdrop-filter: blur(0)
-          forces Chrome's compositor to composite this element normally (it must
-          sample what's behind the element), which prevents video hardware
-          overlay planes from bypassing CSS z-index. blur(0) is visually a no-op
-          and does NOT affect the videos' own color rendering (backdrop-filter
-          applies to the BACKDROP, not the element's own pixels). */}
-      {createPortal(
-        <div
-          id="pvp-portal-root"
-          style={{
-            position: "fixed",
-            left: windowSize.w / 2,
-            top: windowSize.h / 2,
-            transformOrigin: "top left",
-            pointerEvents: "none",
-            zIndex: 9997,
-            backdropFilter: "blur(0px)",
-          }}
-        />,
-        document.body
-      )}
 
       {/* Opening/open card */}
       {openNoteId && openProgress > 0 && notes.filter(n => n.id === openNoteId).map((note) => (
