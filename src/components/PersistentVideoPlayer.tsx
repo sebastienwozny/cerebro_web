@@ -126,8 +126,8 @@ export function prewarmAudio(blockId: string) {
 
 function PersistentVideoPlayerImpl({
   blockId, videoBlob, posterDataUrl,
-  canvasRect, openRect, openProgress, editorScrollY,
-  playing, unlocked, zIndex, pointerEvents, rotationDeg = 0, isHovered = false,
+  canvasRect, openRect, openProgress,
+  playing, unlocked, zIndex, pointerEvents, rotationDeg = 0,
   transformTransition = false, showPoster = false, portalToBody = false,
   animateLeftTop = false, isSelected = false, isDeleting = false, isPopping = false, children,
 }: Props) {
@@ -375,7 +375,7 @@ function PersistentVideoPlayerImpl({
     <div
       ref={outerRef}
       onWheel={onWheel}
-      onClick={(e) => {
+      onClick={() => {
         if (!unlocked) return;
         setLocalSelected(true);
         // Let NoteEditor create a NodeSelection on the matching video node so

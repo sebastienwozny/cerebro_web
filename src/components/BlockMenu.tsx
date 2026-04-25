@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Type, RotateCcw, Copy, Trash2, Files, Download } from "lucide-react";
 import type { Editor } from "@tiptap/react";

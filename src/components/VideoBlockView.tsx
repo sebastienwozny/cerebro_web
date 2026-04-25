@@ -32,7 +32,7 @@ export default function VideoBlockView({ node, getPos, selected, editor }: NodeV
   // clicking the video doesn't create a NodeSelection via ProseMirror's usual
   // path. Force-select on mousedown so the media toolbar can trigger.
   const handleMouseDown = () => {
-    if (pos < 0) return;
+    if (pos == null || pos < 0) return;
     const cur = editor.state.selection;
     if (cur instanceof NodeSelection && cur.from === pos) return;
     editor.chain().setNodeSelection(pos).run();

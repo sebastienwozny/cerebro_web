@@ -508,7 +508,6 @@ function NoteCard({
       {/* Persistent video player — one <video> element that spans hover →
           open → close. No swap, continuous playback. */}
       {headerMedia?.type === "video" && !suppressVideoPortal && (() => {
-        const hoverActive = cursorInside && !hoverSuppressed && !isOpen;
         // For `playing`, intentionally skip the hoverSuppressed gate. Otherwise
         // `playing` flips false→true the instant another card finishes closing
         // (openNoteId→null lifts hoverSuppressed), which triggers a fresh
@@ -558,7 +557,7 @@ function NoteCard({
         // (before t>0), so the cursorInside reset that happens on shadow mount
         // doesn't trigger a pause()+seek(0) mid-playback — which was the cause
         // of the visible saccade at open start.
-        const playing = playingHover || isShadowInstance || t > 0 || isResizing || isClosing;
+        const playing = !!(playingHover || isShadowInstance || t > 0 || isResizing || isClosing);
         const unlocked = editing;
         const pointerEvents = editing ? "auto" : "none";
 

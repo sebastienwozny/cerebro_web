@@ -444,7 +444,7 @@ export default function Canvas() {
   );
 
   const handleDragEnd = useCallback(
-    async (noteId: string) => {
+    async (_noteId: string) => {
       const starts = groupDragStartRef.current;
       const dupeIds = dragDuplicateIdsRef.current;
       // Stop rotation immediately
@@ -560,7 +560,7 @@ export default function Canvas() {
         // Wait two frames so Dexie's liveQuery has propagated and React has
         // re-rendered with the new note values before we drop the visual
         // override — otherwise the card snaps to its pre-resize size.
-        await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+        await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
       }
       resizeOverrideRef.current = null;
       setResizeOverride(null);
