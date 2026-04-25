@@ -2,41 +2,11 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronRight, Type, RotateCcw, Copy, Trash2, Files, Download } from "lucide-react";
 import type { Editor } from "@tiptap/react";
-import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
+import { BLOCK_DEFS, getBlockDefAt, type BlockDef } from "../lib/blockRegistry";
 import { useLockOverlayScroll } from "../hooks/useLockOverlayScroll";
+import { useMenuDismiss } from "../hooks/useMenuDismiss";
 
 const TURN_INTO_DEFS = BLOCK_DEFS.filter((d) => d.type !== "image" && d.type !== "video" && d.type !== "hr");
-
-function getBlockDefAtPos(editor: Editor | null, pos: number | null): BlockDef {
-  const text = BLOCK_DEFS[0];
-  if (!editor || pos === null) return text;
-  const $pos = editor.state.doc.resolve(pos);
-  // When $pos sits between top-level children of doc (e.g. right at a leaf
-  // block like <hr>, <img>, or a video), depth === 0 — look at nodeAfter to
-  // identify the block.
-  if ($pos.depth === 0) {
-    const name = $pos.nodeAfter?.type.name;
-    if (name === "horizontalRule") return BLOCK_DEFS.find((b) => b.type === "hr") ?? text;
-    if (name === "image") return BLOCK_DEFS.find((b) => b.type === "image") ?? text;
-    if (name === "video") return BLOCK_DEFS.find((b) => b.type === "video") ?? text;
-    return text;
-  }
-  for (let d = $pos.depth; d >= 1; d--) {
-    const name = $pos.node(d).type.name;
-    if (name === "heading") {
-      const level = $pos.node(d).attrs.level as number;
-      const key = `heading${level}`;
-      return BLOCK_DEFS.find((b) => b.type === key) ?? text;
-    }
-    if (name === "bulletList") return BLOCK_DEFS.find((b) => b.type === "bulletList") ?? text;
-    if (name === "orderedList") return BLOCK_DEFS.find((b) => b.type === "orderedList") ?? text;
-    if (name === "taskList") return BLOCK_DEFS.find((b) => b.type === "todo") ?? text;
-    if (name === "blockquote") return BLOCK_DEFS.find((b) => b.type === "quote") ?? text;
-    if (name === "codeBlock") return BLOCK_DEFS.find((b) => b.type === "codeBlock") ?? text;
-    if (name === "horizontalRule") return BLOCK_DEFS.find((b) => b.type === "hr") ?? text;
-  }
-  return text;
-}
 
 interface Props {
   x: number;
@@ -65,7 +35,10 @@ export default function BlockMenu({
   onDownload,
   onClose,
 }: Props) {
-  const currentDef = useMemo(() => getBlockDefAtPos(editor, blockPos), [editor, blockPos]);
+  const currentDef = useMemo(
+    () => (editor && blockPos !== null ? getBlockDefAt(editor, blockPos) : BLOCK_DEFS[0]),
+    [editor, blockPos],
+  );
   const isMedia = currentDef.type === "image" || currentDef.type === "video";
   const hasTextOps = !isMedia && currentDef.type !== "hr";
   const menuRef = useRef<HTMLDivElement>(null);
@@ -73,20 +46,7 @@ export default function BlockMenu({
   const [showSubmenu, setShowSubmenu] = useState(false);
   const [submenuFlipLeft, setSubmenuFlipLeft] = useState(false);
 
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) onClose();
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("pointerdown", handleClick, true);
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      window.removeEventListener("pointerdown", handleClick, true);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [onClose]);
+  useMenuDismiss([menuRef], onClose);
 
   useLockOverlayScroll();
 

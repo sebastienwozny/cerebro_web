@@ -38,7 +38,6 @@
   --color-checkbox-checked: #ffffff;
   --color-checkbox-check-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
   --handle-bg: #2a2d30;
-  --handle-bg-subtle: rgba(255, 255, 255, 0.04);
   --handle-color: #a8a8a8;
   --handle-bg-hover: #3a3d40;
   --handle-color-hover: #cfcfcf;
@@ -89,7 +88,6 @@
     --color-checkbox-checked: #1a1a1a;
     --color-checkbox-check-svg: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
     --handle-bg: #e5e5e5;
-    --handle-bg-subtle: rgba(0, 0, 0, 0.03);
     --handle-color: #bdbdbd;
     --handle-bg-hover: #d4d4d4;
     --handle-color-hover: #8a8a8a;

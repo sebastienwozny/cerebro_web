@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useMenuDismiss } from "../hooks/useMenuDismiss";
 
 const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 const MOD = isMac ? "⌘" : "Ctrl+";
@@ -26,24 +27,7 @@ export type { MenuItem };
 export default function ContextMenu({ x, y, items, onClose }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close on click outside or Escape
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    // Use capture to catch clicks before they propagate
-    window.addEventListener("pointerdown", handleClick, true);
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      window.removeEventListener("pointerdown", handleClick, true);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [onClose]);
+  useMenuDismiss([menuRef], onClose);
 
   // Adjust position so menu stays within viewport
   useEffect(() => {

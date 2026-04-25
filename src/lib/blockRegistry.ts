@@ -119,3 +119,47 @@ export const BLOCK_DEFS: BlockDef[] = [
 
 export const BLOCK_DEF: Record<BlockType, BlockDef> =
   Object.fromEntries(BLOCK_DEFS.map((d) => [d.type, d])) as Record<BlockType, BlockDef>;
+
+// Map ProseMirror node type names to BlockDef. Heading is excluded — its
+// def depends on the node's `level` attr, so it's resolved inline below.
+const PM_NODE_TO_BLOCK_TYPE: Record<string, BlockType> = {
+  horizontalRule: "hr",
+  image: "image",
+  video: "video",
+  bulletList: "bulletList",
+  orderedList: "orderedList",
+  taskList: "todo",
+  blockquote: "quote",
+  codeBlock: "codeBlock",
+};
+
+/**
+ * Resolves the BlockDef for the block enclosing a given doc position. When
+ * `pos` is omitted the editor's current selection.from is used. Falls back to
+ * the "text" def when the position is at a top-level gap with no leaf after
+ * it, or inside a textblock that doesn't match any known type.
+ */
+export function getBlockDefAt(editor: Editor, pos?: number): BlockDef {
+  const text = BLOCK_DEFS[0];
+  const target = pos ?? editor.state.selection.from;
+  const $pos = editor.state.doc.resolve(target);
+  // Top-level gap (e.g. between two leaf blocks) — inspect nodeAfter.
+  if ($pos.depth === 0) {
+    const name = $pos.nodeAfter?.type.name;
+    if (!name) return text;
+    const t = PM_NODE_TO_BLOCK_TYPE[name];
+    return t ? BLOCK_DEF[t] : text;
+  }
+  for (let d = $pos.depth; d >= 1; d--) {
+    const node = $pos.node(d);
+    const name = node.type.name;
+    if (name === "heading") {
+      const level = node.attrs.level as number;
+      const key = `heading${level}` as BlockType;
+      return BLOCK_DEF[key] ?? text;
+    }
+    const t = PM_NODE_TO_BLOCK_TYPE[name];
+    if (t) return BLOCK_DEF[t];
+  }
+  return text;
+}

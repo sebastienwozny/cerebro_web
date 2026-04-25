@@ -2,25 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown } from "lucide-react";
 import type { Editor } from "@tiptap/react";
-import { BLOCK_DEFS, type BlockDef } from "../lib/blockRegistry";
+import { BLOCK_DEFS, getBlockDefAt, type BlockDef } from "../lib/blockRegistry";
+import { useMenuDismiss } from "../hooks/useMenuDismiss";
 
 const TURN_INTO_DEFS = BLOCK_DEFS.filter(
   (d) => d.type !== "image" && d.type !== "video" && d.type !== "hr",
 );
-
-function getCurrentBlockDef(editor: Editor | null): BlockDef {
-  const text = BLOCK_DEFS[0];
-  if (!editor) return text;
-  if (editor.isActive("heading", { level: 1 })) return BLOCK_DEFS.find((d) => d.type === "heading1") ?? text;
-  if (editor.isActive("heading", { level: 2 })) return BLOCK_DEFS.find((d) => d.type === "heading2") ?? text;
-  if (editor.isActive("heading", { level: 3 })) return BLOCK_DEFS.find((d) => d.type === "heading3") ?? text;
-  if (editor.isActive("bulletList")) return BLOCK_DEFS.find((d) => d.type === "bulletList") ?? text;
-  if (editor.isActive("orderedList")) return BLOCK_DEFS.find((d) => d.type === "orderedList") ?? text;
-  if (editor.isActive("taskList")) return BLOCK_DEFS.find((d) => d.type === "todo") ?? text;
-  if (editor.isActive("blockquote")) return BLOCK_DEFS.find((d) => d.type === "quote") ?? text;
-  if (editor.isActive("codeBlock")) return BLOCK_DEFS.find((d) => d.type === "codeBlock") ?? text;
-  return text;
-}
 
 interface Props {
   editor: Editor | null;
@@ -53,23 +40,7 @@ export default function TurnIntoButton({ editor, visible, tooltipsEnabled, onSet
     if (!visible) setOpen(false);
   }, [visible]);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      if (btnRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("pointerdown", handleClick, true);
-    window.addEventListener("keydown", handleKey);
-    return () => {
-      window.removeEventListener("pointerdown", handleClick, true);
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, [open]);
+  useMenuDismiss([menuRef, btnRef], () => setOpen(false), open);
 
   // Position the dropdown above the button, centered horizontally.
   useLayoutEffect(() => {
@@ -86,7 +57,7 @@ export default function TurnIntoButton({ editor, visible, tooltipsEnabled, onSet
     setMenuPos({ left, top });
   }, [open]);
 
-  const currentDef = getCurrentBlockDef(editor);
+  const currentDef: BlockDef = editor ? getBlockDefAt(editor) : BLOCK_DEFS[0];
   const CurrentIcon = currentDef.icon;
 
   const handleSelect = (def: BlockDef) => {
