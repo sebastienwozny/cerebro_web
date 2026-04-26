@@ -229,16 +229,17 @@ function PersistentVideoPlayerImpl({
     if (v && v.src !== objectUrl) v.src = objectUrl;
   }, [objectUrl]);
 
-  // Continuously copy the source <video>'s current frame to this PVP's
-  // <canvas>. The canvas uses the Display P3 color space so wide-gamut
-  // macOS displays render the video frames with the same color management
-  // as Chrome's native overlay path — without putting the video itself on
-  // overlay (which would cause see-through between videos with rounded
-  // corners). The canvas element can change underneath us when the portal
-  // target switches (canvas-rest → opening animation): React unmounts the
-  // old canvas and mounts a new one. The loop reads `canvasRef.current`
-  // every frame so it always targets the current element, and re-acquires
-  // the 2D context whenever the canvas instance changes.
+  // Copy the source <video>'s current frame to this PVP's <canvas> via a
+  // throttled rAF loop: only call drawImage when either the video frame
+  // changed (currentTime advanced) OR the canvas element was swapped (the
+  // portal target switches between canvas-rest, opening anim, and fully-
+  // open states, remounting the canvas under us). Without throttling, 10
+  // visible video cards = 10 × drawImage × 60Hz of full-HD pixel pushes,
+  // which starves CSS transitions and produces visible flicker during
+  // reorder/zoom. With throttling, paused videos cost ~nothing per frame
+  // (just an integer comparison) and playing videos cost one draw per
+  // source frame. Display P3 color space preserves wide-gamut color
+  // management on macOS so we don't lose anything vs. native overlay.
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -246,27 +247,37 @@ function PersistentVideoPlayerImpl({
     let stopped = false;
     let lastCanvas: HTMLCanvasElement | null = null;
     let ctx: CanvasRenderingContext2D | null = null;
+    let lastDrawnTime = -1;
 
-    const draw = () => {
+    const tick = () => {
       if (stopped) return;
       const canvas = canvasRef.current;
-      if (canvas !== lastCanvas) {
+      const canvasChanged = canvas !== lastCanvas;
+      if (canvasChanged) {
         lastCanvas = canvas;
         ctx = canvas
           ? (canvas.getContext("2d", { colorSpace: "display-p3" }) as CanvasRenderingContext2D | null)
           : null;
-        // Hint the browser to use high-quality resampling when CSS scales
-        // the canvas pixel buffer to its display size.
         if (ctx) ctx.imageSmoothingQuality = "high";
+        // Force a draw on the new canvas regardless of whether a new
+        // video frame has arrived since the last tick.
+        lastDrawnTime = -1;
       }
-      if (canvas && ctx && video.readyState >= 2 && video.videoWidth > 0) {
+      if (
+        canvas &&
+        ctx &&
+        video.readyState >= 2 &&
+        video.videoWidth > 0 &&
+        (canvasChanged || video.currentTime !== lastDrawnTime)
+      ) {
         if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
         if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        lastDrawnTime = video.currentTime;
       }
-      drawRafRef.current = requestAnimationFrame(draw);
+      drawRafRef.current = requestAnimationFrame(tick);
     };
-    drawRafRef.current = requestAnimationFrame(draw);
+    drawRafRef.current = requestAnimationFrame(tick);
 
     return () => {
       stopped = true;

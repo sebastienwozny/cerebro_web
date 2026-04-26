@@ -100,7 +100,7 @@ function CornerHandle({ position, size, strokeColor, visible, resizeHandlers }: 
 
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, isPopping, isAnimating, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
   isShadowInstance, suppressVideoPortal,
   children,
@@ -284,14 +284,6 @@ function NoteCard({
           transformOrigin: "top left",
           transform: `translate3d(var(--pan-x, 0px), var(--pan-y, 0px), 0) scale(var(--zoom, 1)) translate3d(${visualLeft}px, ${visualTop}px, 0)`,
           zIndex: openProgress > 0 && !isShadowInstance ? "var(--z-card-open)" : note.zOrder,
-          // Position is encoded in this div's transform (via CSS-var pan/zoom
-          // composition + visualLeft/Top). Animate transform during undo so
-          // the card slides to its restored position in lockstep with its
-          // PVP (which has its own matching transition). Without this, the
-          // card teleports while the PVP slides — looks like a duplicate.
-          transition: isAnimating && t === 0 && !isDragging && !isFollowing
-            ? "transform 0.35s cubic-bezier(0.25, 1, 0.5, 1)"
-            : undefined,
         }}
       >
       <div
@@ -627,7 +619,11 @@ function NoteCard({
             // controls layer so the video sits above the body backdrop.
             zIndex={portalToBody ? "var(--z-editor-controls)" : note.zOrder}
             portalToBody={portalToBody}
-            animateLeftTop={!!isAnimating && !isDragging && !isFollowing && t === 0}
+            // No animateLeftTop: card teleports too (CSS transition on the
+            // composed transform was glitchy), so PVP must match — otherwise
+            // PVP slides while card teleports → visible duplicate during
+            // reorder/undo.
+            animateLeftTop={false}
             isSelected={isSelected && openProgress < 0.1}
             pointerEvents={pointerEvents}
             rotationDeg={(isDragging || isFollowing) ? rotation : 0}
