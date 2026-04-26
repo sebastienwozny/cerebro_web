@@ -367,15 +367,18 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     }));
   }
 
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so the selection collapse runs BEFORE
+  // the browser paints the editor's first frame on open. Without this, the
+  // editor briefly paints the header image with .ProseMirror-selectednode
+  // (selection ring) before the effect removes it — visible in Electron
+  // (1ms flash) where the paint timing is slightly tighter than Chrome.
+  useLayoutEffect(() => {
     if (editor) {
       editor.setEditable(editable);
       if (editable) {
         const firstType = editor.getJSON().content?.[0]?.type;
         const hasHeaderImage = firstType === "image" || firstType === "video";
         if (hasHeaderImage) {
-          // Collapse any NodeSelection before blurring — without this the
-          // header image stays marked .ProseMirror-selectednode on open.
           editor.chain().setTextSelection(0).blur().run();
         } else {
           editor.commands.setTextSelection(0);
