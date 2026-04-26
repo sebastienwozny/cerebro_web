@@ -706,33 +706,37 @@ export default function Canvas() {
       )}
 
       {/* Backdrop portaled to document.body — bypasses canvas-layer to
-          reliably cover the entire canvas at z:9998. */}
+          reliably cover the entire canvas at z:9998. For video cards the
+          opacity ramps to 1 quickly (eased at openProgress*4 capped at 1):
+          the playing video sits on Chrome's hardware overlay plane which
+          bypasses CSS compositing, so a partially-transparent backdrop lets
+          canvas cards bleed *through* the opening video. Reaching opacity 1
+          at openProgress=0.25 hides the see-through without delaying the
+          open feel. Non-video cards keep the linear ramp. */}
       {openProgress > 0 && createPortal(
         <div
           className="fixed inset-0 pointer-events-none bg-card-open"
-          style={{ opacity: openProgress, zIndex: 9998 }}
+          style={{
+            opacity: (() => {
+              const opening = openNoteId ? notes.find(n => n.id === openNoteId) : null;
+              const isVideo = opening ? getHeaderMedia(opening)?.type === "video" : false;
+              return isVideo ? Math.min(1, openProgress * 4) : openProgress;
+            })(),
+            zIndex: 9998,
+          }}
         />,
         document.body
       )}
 
       {/* Canvas layer — positioning anchor at window center. Pan/zoom are
           applied per-card via CSS variables (--pan-x, --pan-y, --zoom)
-          inherited from this element, NOT via a transform on this layer.
-          Opacity is tied to `1 - openProgress` so canvas content fades out
-          while the body backdrop fades in (and reverses on close). This
-          avoids relying on stacking-context isolation to cover canvas-rest
-          PVPs/cards — `note.zOrder` is unbounded via repeated `bringToFront`,
-          and Chrome's compositor doesn't reliably trap PVP descendants
-          behind a parent SC, so cards with high zOrder leaked above the
-          backdrop. The opacity cross-fade is structural: there's nothing
-          to leak when the layer itself is invisible. */}
+          inherited from this element. */}
       <div
         ref={layerRef}
         className="absolute"
         style={{
           left: windowSize.w / 2,
           top: windowSize.h / 2,
-          opacity: 1 - openProgress,
         }}
       >
         {notes.map((note) => {

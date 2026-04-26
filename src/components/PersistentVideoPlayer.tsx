@@ -94,6 +94,25 @@ const videoElementCache = new Map<string, HTMLVideoElement>();
 // of at animation end when the stall is perceptible.
 const audioPrewarmed = new Set<string>();
 
+// Hidden host for all source <video> elements. They drive decoding and audio
+// but are never visually displayed — each PVP renders frames to its own
+// <canvas> via drawImage. This bypasses Chrome's hardware overlay path
+// (which causes see-through between videos with border-radius — a known
+// compositor bug, see Firefox bug 1869994 / Chromium 40813064), and lets us
+// render through a Display P3 canvas to preserve color management.
+let videoHostEl: HTMLDivElement | null = null;
+function getVideoHost(): HTMLDivElement {
+  if (!videoHostEl) {
+    videoHostEl = document.createElement("div");
+    videoHostEl.setAttribute("data-pvp-video-host", "");
+    // 1×1 fixed offscreen — keeps videos in the DOM (so decoding + audio
+    // work reliably) but they're not visually rendered anywhere.
+    videoHostEl.style.cssText = "position:fixed;width:1px;height:1px;top:0;left:0;opacity:0;pointer-events:none;overflow:hidden";
+    document.body.appendChild(videoHostEl);
+  }
+  return videoHostEl;
+}
+
 function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
   let v = videoElementCache.get(blockId);
   if (!v) {
@@ -103,13 +122,10 @@ function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
     v.playsInline = true;
     v.muted = true;
     v.preload = "auto";
-    // Always visible: the video element shows its first frame at currentTime=0
-    // when paused, and that frame goes through the same color-managed video
-    // pipeline as the playing state. Using a poster <img> as the resting
-    // visual produced a brightness mismatch on wide-gamut macOS displays
-    // (img bypasses color management on transformed parents, video doesn't),
-    // so the rest→hover transition was visibly non-fluid.
-    v.style.cssText = "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block";
+    // Sized to fit the 1×1 host but with full intrinsic resolution (drawImage
+    // reads from videoWidth/Height regardless of CSS size).
+    v.style.cssText = "width:1px;height:1px;display:block";
+    getVideoHost().appendChild(v);
     videoElementCache.set(blockId, v);
   }
   return v;
@@ -138,10 +154,14 @@ function PersistentVideoPlayerImpl({
   animateLeftTop = false, isSelected = false, isDeleting = false, isPopping = false, children,
 }: Props) {
   // Stable video element from the module-level cache — survives both React
-  // re-renders and NoteCard unmount/remount (viewport culling on pan).
+  // re-renders and NoteCard unmount/remount (viewport culling on pan). The
+  // element lives in a hidden host div; its frames are drawn to a per-PVP
+  // <canvas> below.
   const videoRef = useRef<HTMLVideoElement>(getOrCreateVideoElement(blockId));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
+  const drawRafRef = useRef(0);
   const objectUrl = getVideoUrl(blockId, videoBlob);
 
   useEffect(() => {
@@ -176,22 +196,55 @@ function PersistentVideoPlayerImpl({
     if (v && v.src !== objectUrl) v.src = objectUrl;
   }, [objectUrl]);
 
-  // Sync showPoster → display style directly so React never touches the element.
-  useLayoutEffect(() => {
-    const v = videoRef.current;
-    if (v) v.style.display = showPoster ? "none" : "block";
-  }, [showPoster]);
+  // Continuously copy the source <video>'s current frame to this PVP's
+  // <canvas>. The canvas uses the Display P3 color space so wide-gamut
+  // macOS displays render the video frames with the same color management
+  // as Chrome's native overlay path — without putting the video itself on
+  // overlay (which would cause see-through between videos with rounded
+  // corners). The canvas element can change underneath us when the portal
+  // target switches (canvas-rest → opening animation): React unmounts the
+  // old canvas and mounts a new one. The loop reads `canvasRef.current`
+  // every frame so it always targets the current element, and re-acquires
+  // the 2D context whenever the canvas instance changes.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
 
-  // After every render, move the stable video element into the current inner div.
-  // appendChild is a no-op if already the last child; if the portal container
-  // just changed, this re-parents the element before the browser paints —
-  // preserving playback state with no visible stutter.
+    let stopped = false;
+    let lastCanvas: HTMLCanvasElement | null = null;
+    let ctx: CanvasRenderingContext2D | null = null;
+
+    const draw = () => {
+      if (stopped) return;
+      const canvas = canvasRef.current;
+      if (canvas !== lastCanvas) {
+        lastCanvas = canvas;
+        ctx = canvas
+          ? (canvas.getContext("2d", { colorSpace: "display-p3" }) as CanvasRenderingContext2D | null)
+          : null;
+      }
+      if (canvas && ctx && video.readyState >= 2 && video.videoWidth > 0) {
+        if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
+        if (canvas.height !== video.videoHeight) canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      }
+      drawRafRef.current = requestAnimationFrame(draw);
+    };
+    drawRafRef.current = requestAnimationFrame(draw);
+
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(drawRafRef.current);
+    };
+  }, []);
+
+  // Sync showPoster → canvas visibility so the underlying poster <img> shows
+  // through during the close hand-off (avoids a jump from last-frame to
+  // first-frame on the canvas-card poster).
   useLayoutEffect(() => {
-    const inner = innerRef.current;
-    const v = videoRef.current;
-    if (!inner || !v) return;
-    if (inner.lastChild !== v) inner.appendChild(v);
-  });
+    const c = canvasRef.current;
+    if (c) c.style.display = showPoster ? "none" : "block";
+  }, [showPoster]);
 
   const [localSelected, setLocalSelected] = useState(false);
   useEffect(() => {
@@ -445,7 +498,24 @@ function PersistentVideoPlayerImpl({
             pointerEvents: "none",
           }}
         />
-        {/* <video> is injected imperatively via useLayoutEffect — see above */}
+        {/* Canvas rendering of the source <video> (which lives offscreen).
+            Using a canvas rather than displaying the <video> directly keeps
+            this PVP off Chrome's hardware overlay plane — overlay videos
+            with rounded corners cause see-through to other overlay videos
+            (a known compositor bug). The canvas's `colorSpace: display-p3`
+            preserves color management on wide-gamut macOS displays so the
+            rendering matches what overlay would produce. */}
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            pointerEvents: "none",
+          }}
+        />
       </div>
       {/* Hover progress bar — canvas rest only */}
       <div

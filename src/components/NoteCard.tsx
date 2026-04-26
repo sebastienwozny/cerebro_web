@@ -510,7 +510,7 @@ function NoteCard({
         <div
           ref={scrollRef}
           data-editor-overlay
-          className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-30 pb-10 px-5"
+          className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-30 pb-10 px-5 bg-card-open"
         >
           <div
             className={isImageCard ? "image-card-open" : undefined}
