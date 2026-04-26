@@ -480,11 +480,15 @@ function PersistentVideoPlayerImpl({
           height: "100%",
           // `scale(1.02)` on hover mirrors the NoteCard hover. The pre-applied
           // translateZ(0) keeps the layer GPU-stable so the scale is a pure
-          // compositor op (no texture resample of the video).
+          // compositor op (no texture resample of the video). During drag,
+          // rotate around `top center` to match the NoteCard's drag tilt
+          // (the card "hangs" from where the pointer grabbed it).
           transform: isDeleting
             ? "translateZ(0) scale(0)"
-            : isHovered ? "translateZ(0) scale(1.02)" : "translateZ(0)",
-          transformOrigin: "center",
+            : Math.abs(rotationDeg) > 0.001
+              ? `translateZ(0) rotate(${rotationDeg}deg)`
+              : isHovered ? "translateZ(0) scale(1.02)" : "translateZ(0)",
+          transformOrigin: Math.abs(rotationDeg) > 0.001 ? "top center" : "center",
           willChange: "transform",
           transition: isDeleting
             ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"

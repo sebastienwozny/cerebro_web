@@ -311,17 +311,10 @@ function NoteCard({
             : isDragging
                 // Drag returns the card to its base size — even if it was
                 // hover-scaled the moment before drag started — so picking
-                // up feels like "lifting" out of the hover state. Video
-                // cards still skip rotation entirely (PVP isn't rotation-
-                // synced, so the card frame would rotate around a still
-                // video).
-                ? headerMedia?.type === "video"
-                  ? "none"
-                  : `rotate(${rotation}deg)`
+                // up feels like "lifting" out of the hover state.
+                ? `rotate(${rotation}deg)`
                 : isFollowing
-                  ? headerMedia?.type === "video"
-                    ? "none"
-                    : `rotate(${rotation}deg)`
+                  ? `rotate(${rotation}deg)`
                   : t > 0
                     ? "none"
                     : isHovered && !isSelected && !suppressScale && !isResizing && !isPressed
@@ -637,7 +630,7 @@ function NoteCard({
             animateLeftTop={!!isAnimating && !isDragging && !isFollowing && t === 0}
             isSelected={isSelected && openProgress < 0.1}
             pointerEvents={pointerEvents}
-            rotationDeg={0}
+            rotationDeg={(isDragging || isFollowing) ? rotation : 0}
             isHovered={isHovered && !isSelected && !suppressScale && !isResizing}
             transformTransition={t === 0 && !isDragging && !isFollowing && !isResizing}
             isDeleting={isDeleting}
