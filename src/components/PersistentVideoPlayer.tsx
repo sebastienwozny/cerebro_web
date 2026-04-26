@@ -79,6 +79,31 @@ interface Props {
  * `muted` is set inline (default attribute) at initial render so the browser's
  * autoplay policy accepts the play() call; useEffect only flips it off when
  * `unlocked` becomes true in the open state.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ *   CHROME HARDWARE-OVERLAY WORKAROUND — REVISIT IF CHROMIUM 40813064 LANDS
+ * ────────────────────────────────────────────────────────────────────────────
+ * The displayed video is rendered to a per-instance <canvas> element via
+ * requestAnimationFrame + drawImage from a hidden source <video>. This is a
+ * workaround for a known Chromium compositor bug where two videos with
+ * `border-radius` displayed simultaneously see THROUGH each other (the
+ * playing video's overlay plane has alpha pixels that reveal whatever is
+ * compositionally below, including other canvas-rest videos), with no
+ * reliable CSS fix:
+ *   - Chromium issue: https://issues.chromium.org/issues/40813064
+ *   - Firefox equivalent (already fixed): https://bugzilla.mozilla.org/show_bug.cgi?id=1869994
+ *
+ * If/when Chromium 40813064 ships a fix, this entire indirection can be
+ * removed and we can go back to a single visible <video> per PVP:
+ *   1. Delete `getVideoHost`, `videoHostEl`, and the offscreen-host setup.
+ *   2. Drop the canvas rAF loop (`useEffect` at "Continuously copy …").
+ *   3. Restore the previous useLayoutEffect that appended the cached
+ *      <video> into innerRef and removed the <canvas> placeholder.
+ *   4. Re-style the cached <video> to fill its parent (the prior CSS:
+ *      "position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block").
+ * The `colorSpace: "display-p3"` on the canvas context is what currently
+ * keeps the wide-gamut macOS color rendering matching the native overlay
+ * path; reverting to direct <video> recovers it for free.
  */
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
