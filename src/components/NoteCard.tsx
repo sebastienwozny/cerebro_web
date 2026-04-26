@@ -477,11 +477,12 @@ function NoteCard({
 
         </div>
         {/* Close clipped card content */}
-        </div>
-
-        {/* Resize handles — image cards render them here (inside the card).
-            Video cards render them via PVP so they sit above the video. */}
+        {/* Resize handles — image cards render them here, INSIDE cardRef so
+            the delete scale(0) shrinks them in lockstep with the card.
+            Video cards render them via PVP (passed as children) so they
+            sit above the video. */}
         {!isVideoCard && cornerOverlay}
+        </div>
       </div>
       </div>
       )}

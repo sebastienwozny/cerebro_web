@@ -105,9 +105,15 @@ function getVideoHost(): HTMLDivElement {
   if (!videoHostEl) {
     videoHostEl = document.createElement("div");
     videoHostEl.setAttribute("data-pvp-video-host", "");
-    // 1×1 fixed offscreen — keeps videos in the DOM (so decoding + audio
-    // work reliably) but they're not visually rendered anywhere.
-    videoHostEl.style.cssText = "position:fixed;width:1px;height:1px;top:0;left:0;opacity:0;pointer-events:none;overflow:hidden";
+    // Inside the viewport (so Chrome doesn't throttle decoding for
+    // off-screen elements) but invisible: opacity 0, pointer-events none,
+    // and `clip-path: inset(100%)` to remove painted output without
+    // collapsing the layout box. Critically, the host does NOT constrain
+    // size — Chrome optimizes video decoding based on the element's
+    // display size, so a 1×1 host caused frames to be decoded at
+    // minimum resolution. Letting the videos lay out at intrinsic size
+    // (clipped, but un-collapsed) keeps decode quality at source.
+    videoHostEl.style.cssText = "position:fixed;top:0;left:0;width:0;height:0;opacity:0;pointer-events:none;contain:strict";
     document.body.appendChild(videoHostEl);
   }
   return videoHostEl;
@@ -122,9 +128,11 @@ function getOrCreateVideoElement(blockId: string): HTMLVideoElement {
     v.playsInline = true;
     v.muted = true;
     v.preload = "auto";
-    // Sized to fit the 1×1 host but with full intrinsic resolution (drawImage
-    // reads from videoWidth/Height regardless of CSS size).
-    v.style.cssText = "width:1px;height:1px;display:block";
+    // No CSS width/height: video lays out at its intrinsic resolution so
+    // Chrome's decoder produces full-quality frames. The host's
+    // `contain: strict` ensures these natural-size videos don't overflow
+    // and affect layout/scroll.
+    v.style.cssText = "display:block";
     getVideoHost().appendChild(v);
     videoElementCache.set(blockId, v);
   }
@@ -222,6 +230,9 @@ function PersistentVideoPlayerImpl({
         ctx = canvas
           ? (canvas.getContext("2d", { colorSpace: "display-p3" }) as CanvasRenderingContext2D | null)
           : null;
+        // Hint the browser to use high-quality resampling when CSS scales
+        // the canvas pixel buffer to its display size.
+        if (ctx) ctx.imageSmoothingQuality = "high";
       }
       if (canvas && ctx && video.readyState >= 2 && video.videoWidth > 0) {
         if (canvas.width !== video.videoWidth) canvas.width = video.videoWidth;
@@ -637,8 +648,23 @@ function PersistentVideoPlayerImpl({
         }}
       />
       {/* Outside the rounded clip: corner resize handles for video cards.
-          Rendered by NoteCard, positioned absolute against the outer div. */}
-      {children}
+          Rendered by NoteCard, positioned absolute against this wrapper.
+          Wrapper mirrors the inner div's delete scale so corners shrink
+          in lockstep with the video on delete. */}
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          transform: isDeleting ? "scale(0)" : "none",
+          transformOrigin: "center",
+          transition: isDeleting
+            ? "transform 0.4s cubic-bezier(0.215, 0.61, 0.355, 1)"
+            : "none",
+        }}
+      >
+        {children}
+      </div>
     </div>,
     portalTarget,
   );
