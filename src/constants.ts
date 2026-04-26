@@ -1,9 +1,9 @@
 // Card dimensions (matching Swift constants)
 // Card frame at canvas-rest. Content area (CARD_CONTENT_W) is centered
-// inside with ~110px margin per side. Aspect ratio ≈ √2 (A4 portrait).
-export const CARD_W = 920;
-export const CARD_H = 1301;
-export const CARD_CONTENT_W = 700;
+// inside with 100px margin per side. Aspect ratio ≈ √2 (A4 portrait).
+export const CARD_W = 880;
+export const CARD_H = 1244;
+export const CARD_CONTENT_W = 680;
 export const CARD_RADIUS = 100;
 
 // Open/close animation durations (seconds)
