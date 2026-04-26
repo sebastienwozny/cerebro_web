@@ -28,6 +28,12 @@ interface Props {
   spaceHeld: boolean;
   groupDragDelta: { dx: number; dy: number };
   groupDragRotation: number;
+  /** Per-card position overrides driven by an imperative animation (gsap-
+   *  driven reorder/undo). When set, replaces note.positionX/Y so React
+   *  state can reflect mid-flight visual position without writing to the
+   *  database every frame. */
+  overrideX?: number;
+  overrideY?: number;
   onTap: (noteId: string) => void;
   onShiftTap: (noteId: string) => void;
   onClose: () => void;
@@ -100,7 +106,7 @@ function CornerHandle({ position, size, strokeColor, visible, resizeHandlers }: 
 
 function NoteCard({
   note, scale, offsetX, offsetY, windowW, windowH,
-  isOpen, isSelected, isDeleting, isPopping, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation,
+  isOpen, isSelected, isDeleting, isPopping, openProgress, isClosing, closingScrollOffset, hoverSuppressed, spaceHeld, groupDragDelta, groupDragRotation, overrideX, overrideY,
   onTap, onShiftTap, onClose, onDragStart, onDragMove, onDragEnd, onDragRotation, onDragDuplicate, onBringToFront, onResize, onResizeEnd,
   isShadowInstance, suppressVideoPortal,
   children,
@@ -214,13 +220,15 @@ function NoteCard({
   // ref + direct DOM update on scroll — keeping it in React state caused
   // async re-renders that fought the imperative update and produced lag.
 
-  const canvasLeft = note.positionX - cardW / 2 + groupDragDelta.dx;
-  const canvasTop = note.positionY - cardH / 2 + groupDragDelta.dy;
+  const posX = overrideX ?? note.positionX;
+  const posY = overrideY ?? note.positionY;
+  const canvasLeft = posX - cardW / 2 + groupDragDelta.dx;
+  const canvasTop = posY - cardH / 2 + groupDragDelta.dy;
 
   const screenLeft = (windowW - baseW) / 2;
   const screenTop = 0;
-  const cardScreenLeft = windowW / 2 + note.positionX * scale + offsetX - (cardW * scale) / 2;
-  const cardScreenTop = windowH / 2 + note.positionY * scale + offsetY - (cardH * scale) / 2;
+  const cardScreenLeft = windowW / 2 + posX * scale + offsetX - (cardW * scale) / 2;
+  const cardScreenTop = windowH / 2 + posY * scale + offsetY - (cardH * scale) / 2;
 
   const scl = t > 0 ? lerp(scale, 1, t) : 1;
   const visualLeft = t > 0 ? lerp(cardScreenLeft, screenLeft, t) : canvasLeft;
@@ -582,8 +590,11 @@ function NoteCard({
               borderRadius: cardRadius * scale,
             }
           : {
-              left: note.positionX - cardW / 2 + groupDragDelta.dx,
-              top: note.positionY - cardH / 2 + groupDragDelta.dy,
+              // Honor the gsap-driven override so PVP follows the card
+              // during reorder/undo animations (otherwise PVP stays at
+              // note.positionX while the card slides → visible duplicate).
+              left: posX - cardW / 2 + groupDragDelta.dx,
+              top: posY - cardH / 2 + groupDragDelta.dy,
               width: cardW,
               height: cardH,
               borderRadius: cardRadius,

@@ -88,6 +88,11 @@ export default function Canvas() {
     popTimerRef.current = setTimeout(() => setPopIds(new Set()), 400);
   }, []);
   const [animatingIds, setAnimatingIds] = useState<Set<string>>(new Set());
+  // Per-card visual position overrides driven by gsap during reorder/undo
+  // animations. Bypasses CSS transitions on a composed transform string
+  // (which glitched mid-flight). Cards read overrideX/overrideY when set
+  // and ignore note.positionX/Y until we commit to the database and clear.
+  const [animOverride, setAnimOverride] = useState<Map<string, { x: number; y: number }> | null>(null);
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; noteId: string | null } | null>(null);
@@ -125,25 +130,47 @@ export default function Canvas() {
   const applyInverse = useCallback(async (action: CanvasAction): Promise<CanvasAction> => {
     switch (action.type) {
       case "move": {
-        // Capture current positions, then restore old ones
+        // Capture current positions, then animate to old ones via gsap.
         const currentNotes = notesRef.current;
+        const targets = action.moves
+          .map(m => {
+            const note = currentNotes.find(n => n.id === m.noteId);
+            if (!note) return null;
+            return { noteId: m.noteId, fromX: note.positionX, fromY: note.positionY, toX: m.oldX, toY: m.oldY };
+          })
+          .filter((t): t is NonNullable<typeof t> => t !== null);
         const inverse: CanvasAction = {
           type: "move",
-          moves: action.moves.map(m => {
-            const note = currentNotes.find(n => n.id === m.noteId);
-            return { noteId: m.noteId, oldX: note?.positionX ?? m.oldX, oldY: note?.positionY ?? m.oldY };
-          }),
+          moves: targets.map(t => ({ noteId: t.noteId, oldX: t.fromX, oldY: t.fromY })),
         };
-        // Enable transition before updating positions
-        const moveIds = new Set(action.moves.map(m => m.noteId));
+        const moveIds = new Set(targets.map(t => t.noteId));
         setAnimatingIds(moveIds);
+        await new Promise<void>(resolve => {
+          const obj = { p: 0 };
+          gsap.to(obj, {
+            p: 1,
+            duration: 0.35,
+            ease: "power2.out",
+            onUpdate: () => {
+              const m = new Map<string, { x: number; y: number }>();
+              for (const t of targets) {
+                m.set(t.noteId, {
+                  x: t.fromX + (t.toX - t.fromX) * obj.p,
+                  y: t.fromY + (t.toY - t.fromY) * obj.p,
+                });
+              }
+              setAnimOverride(m);
+            },
+            onComplete: () => resolve(),
+          });
+        });
         await db.transaction("rw", db.notes, async () => {
-          for (const m of action.moves) {
-            await db.notes.update(m.noteId, { positionX: m.oldX, positionY: m.oldY });
+          for (const t of targets) {
+            await db.notes.update(t.noteId, { positionX: t.toX, positionY: t.toY });
           }
         });
-        // Wait for CSS transition to complete
-        await new Promise(r => setTimeout(r, 380));
+        await new Promise(r => requestAnimationFrame(() => r(undefined)));
+        setAnimOverride(null);
         setAnimatingIds(new Set());
         return inverse;
       }
@@ -242,29 +269,60 @@ export default function Canvas() {
       return a.positionY - b.positionY;
     });
 
-    // Compute sizes and total width
+    // Compute sizes, total width, and per-card target positions
     const sizes = sorted.map(n => getCardSize(n));
     const totalW = sizes.reduce((s, sz) => s + sz.w, 0) + (sorted.length - 1) * GRID_GAP;
     const maxH = Math.max(...sizes.map(sz => sz.h));
-
-    // Enable CSS transition
-    setAnimatingIds(new Set(selected.map(n => n.id)));
-
-    // Place cards in a row: tops aligned, equal gaps, centered on barycenter
     let cursor = -totalW / 2;
-    await db.transaction("rw", db.notes, async () => {
-      for (let i = 0; i < sorted.length; i++) {
-        const sz = sizes[i];
-        await db.notes.update(sorted[i].id, {
-          positionX: cx + cursor + sz.w / 2,
-          positionY: cy + maxH / 2 - sz.h / 2,
-        });
-        cursor += sz.w + GRID_GAP;
-      }
+    const targets = sorted.map((n, i) => {
+      const sz = sizes[i];
+      const t = {
+        noteId: n.id,
+        fromX: n.positionX,
+        fromY: n.positionY,
+        toX: cx + cursor + sz.w / 2,
+        toY: cy + maxH / 2 - sz.h / 2,
+      };
+      cursor += sz.w + GRID_GAP;
+      return t;
     });
 
-    // Wait for CSS transition to complete
-    await new Promise(r => setTimeout(r, 380));
+    // Animate via gsap by tweening a single progress value and computing
+    // each card's interpolated position into an override Map. CSS transitions
+    // on the composed transform string proved unreliable; this drives the
+    // visual position imperatively (one React render per gsap frame).
+    setAnimatingIds(new Set(selected.map(n => n.id)));
+    await new Promise<void>(resolve => {
+      const obj = { p: 0 };
+      gsap.to(obj, {
+        p: 1,
+        duration: 0.35,
+        ease: "power2.out",
+        onUpdate: () => {
+          const m = new Map<string, { x: number; y: number }>();
+          for (const t of targets) {
+            m.set(t.noteId, {
+              x: t.fromX + (t.toX - t.fromX) * obj.p,
+              y: t.fromY + (t.toY - t.fromY) * obj.p,
+            });
+          }
+          setAnimOverride(m);
+        },
+        onComplete: () => resolve(),
+      });
+    });
+
+    // Commit final positions to DB. The override holds final positions so
+    // there's no visual jump while Dexie's liveQuery propagates.
+    await db.transaction("rw", db.notes, async () => {
+      for (const t of targets) {
+        await db.notes.update(t.noteId, { positionX: t.toX, positionY: t.toY });
+      }
+    });
+    // One paint after DB commit so React renders cards at note.positionX
+    // matching the override before we drop the override.
+    await new Promise(r => requestAnimationFrame(() => r(undefined)));
+    setAnimOverride(null);
     setAnimatingIds(new Set());
 
     undoStack.record({ type: "move", moves });
@@ -796,6 +854,8 @@ export default function Canvas() {
                 spaceHeld={spaceHeld}
                 groupDragDelta={inGroupDrag ? groupDragDelta : ZERO_DELTA}
                 groupDragRotation={inGroupDrag ? groupDragRotation : 0}
+                overrideX={animOverride?.get(note.id)?.x}
+                overrideY={animOverride?.get(note.id)?.y}
                 onTap={handleCardTap}
                 onShiftTap={handleCardShiftTap}
                 onClose={closeNote}
