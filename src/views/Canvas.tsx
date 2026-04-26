@@ -764,24 +764,11 @@ export default function Canvas() {
       )}
 
       {/* Backdrop portaled to document.body — bypasses canvas-layer to
-          reliably cover the entire canvas at z:9998. For video cards the
-          opacity ramps to 1 quickly (eased at openProgress*4 capped at 1):
-          the playing video sits on Chrome's hardware overlay plane which
-          bypasses CSS compositing, so a partially-transparent backdrop lets
-          canvas cards bleed *through* the opening video. Reaching opacity 1
-          at openProgress=0.25 hides the see-through without delaying the
-          open feel. Non-video cards keep the linear ramp. */}
+          reliably cover the entire canvas at z:9998. */}
       {openProgress > 0 && createPortal(
         <div
           className="fixed inset-0 pointer-events-none bg-card-open"
-          style={{
-            opacity: (() => {
-              const opening = openNoteId ? notes.find(n => n.id === openNoteId) : null;
-              const isVideo = opening ? getHeaderMedia(opening)?.type === "video" : false;
-              return isVideo ? Math.min(1, openProgress * 4) : openProgress;
-            })(),
-            zIndex: 9998,
-          }}
+          style={{ opacity: openProgress, zIndex: 9998 }}
         />,
         document.body
       )}
