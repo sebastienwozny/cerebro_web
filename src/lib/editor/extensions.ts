@@ -95,7 +95,9 @@ export const VideoBlock = Node.create({
   },
 });
 
-// Extend Tiptap Image to carry aspect ratio
+// Extend Tiptap Image to carry aspect ratio + source URL (for screenshot
+// cards captured from arbitrary web pages — used by NoteCard to flag
+// the card as a "URL screenshot" and drop the rounded corners).
 export const ImageWithAspect = BaseImage.extend({
   addAttributes() {
     return {
@@ -109,6 +111,14 @@ export const ImageWithAspect = BaseImage.extend({
         renderHTML: (attrs: Record<string, unknown>) => {
           if (!attrs.aspect) return {};
           return { "data-aspect": String(attrs.aspect) };
+        },
+      },
+      sourceUrl: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-source-url"),
+        renderHTML: (attrs: Record<string, unknown>) => {
+          if (!attrs.sourceUrl) return {};
+          return { "data-source-url": String(attrs.sourceUrl) };
         },
       },
     };

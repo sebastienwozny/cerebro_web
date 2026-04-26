@@ -4,7 +4,7 @@ import type { Note, NoteBlock } from "../store/db";
 export const IMAGE_CARD_BASE_W = 1200;
 
 export type HeaderMedia =
-  | { type: "image"; dataUrl: string; aspect: number }
+  | { type: "image"; dataUrl: string; aspect: number; sourceUrl?: string }
   | {
       type: "video";
       blockId: string;
@@ -39,7 +39,12 @@ export function getHeaderMedia(note: Pick<Note, "blocks">): HeaderMedia | null {
   const block: NoteBlock | undefined = note.blocks[0];
   if (!block) return null;
   if (block.type === "image" && block.imageDataUrl) {
-    return { type: "image", dataUrl: block.imageDataUrl, aspect: block.imageAspect ?? 1 };
+    return {
+      type: "image",
+      dataUrl: block.imageDataUrl,
+      aspect: block.imageAspect ?? 1,
+      sourceUrl: block.imageSourceUrl,
+    };
   }
   if (block.type === "video" && block.videoBlob && block.videoPosterDataUrl) {
     return {

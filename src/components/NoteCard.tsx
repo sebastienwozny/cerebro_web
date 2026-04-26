@@ -129,7 +129,11 @@ function NoteCard({
     : null;
 
   const { w: cardW, h: cardH } = getCardSize(note);
-  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.10, 80);
+  // URL-screenshot cards are rendered without rounded corners — they're
+  // typically full-bleed page captures and the radius would clip page
+  // chrome (top bars, headers) awkwardly.
+  const isUrlCard = headerMedia?.type === "image" && !!headerMedia.sourceUrl;
+  const cardRadius = isUrlCard ? 0 : Math.max(Math.min(cardW, cardH) * 0.10, 80);
   const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
   const { isDragging, isPressed, dragRotation, handlePointerDown } = useCardDrag({
@@ -444,7 +448,7 @@ function NoteCard({
           {/* Editor content (card mode — clipped). Image cards: only during close. */}
           {!editing && (!isImageCard || (isClosing && t > 0)) && (
             <div
-              className="absolute inset-0 flex justify-center pointer-events-none pt-30"
+              className="absolute inset-0 flex justify-center pointer-events-none pt-25"
               style={{
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
               }}
@@ -504,13 +508,16 @@ function NoteCard({
         <div
           ref={scrollRef}
           data-editor-overlay
-          className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-30 pb-10 px-5 bg-card-open"
+          className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-25 pb-10 px-5 bg-card-open"
         >
           <div
-            className={isImageCard ? "image-card-open" : undefined}
+            className={[
+              isImageCard ? "image-card-open" : "",
+              isUrlCard ? "url-card-open" : "",
+            ].filter(Boolean).join(" ") || undefined}
             style={{
               width: "100%",
-              maxWidth: CARD_CONTENT_W,
+              maxWidth: isUrlCard ? Math.min(windowW - 80, 1000) : CARD_CONTENT_W,
             }}
           >
             {children}
@@ -521,10 +528,13 @@ function NoteCard({
       {/* Hero image for image-card open/close transition — portal so it's not
           clipped. Video cards use PersistentVideoPlayer below instead. */}
       {!isShadowInstance && isMediaCard && headerMedia?.type === "image" && t > 0 && !editing && headerDataUrl && (() => {
-        const editorImgW = CARD_CONTENT_W;
-        const editorImgH = CARD_CONTENT_W * headerMedia.aspect;
+        // URL-screenshot cards open with a wider hero (text below stays at
+        // CARD_CONTENT_W via the .url-card-open CSS rule).
+        const heroW = isUrlCard ? Math.min(windowW - 80, 1000) : CARD_CONTENT_W;
+        const editorImgW = heroW;
+        const editorImgH = heroW * headerMedia.aspect;
         const editorImgX = (windowW - editorImgW) / 2;
-        const editorImgY = 120;
+        const editorImgY = 100;
 
         const targetX = isClosing && closingImgRect.current ? closingImgRect.current.x : editorImgX;
         const targetY = isClosing && closingImgRect.current ? closingImgRect.current.y : editorImgY;
@@ -544,7 +554,7 @@ function NoteCard({
               objectFit: "cover",
               zIndex: "var(--z-editor-controls)",
               pointerEvents: "none",
-              borderRadius: lerp(cardRadius * scale, 6, t),
+              borderRadius: lerp(cardRadius * scale, isUrlCard ? 0 : 6, t),
             }}
             draggable={false}
             decoding="async"
@@ -571,14 +581,14 @@ function NoteCard({
         const editorImgW = CARD_CONTENT_W;
         const editorImgH = CARD_CONTENT_W * headerMedia.aspect;
         const editorImgX = (windowW - editorImgW) / 2;
-        const editorImgY = 120;
+        const editorImgY = 100;
 
         const openRect = {
           left: editorImgX,
           top: editorImgY,
           width: editorImgW,
           height: editorImgH,
-          borderRadius: 6,
+          borderRadius: isUrlCard ? 0 : 6,
         };
         const portalToBody = isShadowInstance || t > 0 || isClosing;
         const canvasRect = portalToBody

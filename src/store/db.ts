@@ -23,6 +23,9 @@ export interface NoteBlock {
   isChecked?: boolean;
   imageDataUrl?: string; // base64 data URL (image blocks)
   imageAspect?: number;  // height / width  (image blocks)
+  imageSourceUrl?: string; // origin URL for screenshot-from-URL cards
+                           // (used to flag the card as "URL screenshot" so
+                           //  the canvas drops the rounded corners)
   codeLanguage?: string; // hljs language id (codeBlock blocks)
   codeWrap?: boolean;    // wrap long lines instead of horizontal scroll
   // Video blocks store the media as a Blob (binary) in IndexedDB to avoid

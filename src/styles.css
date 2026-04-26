@@ -591,6 +591,20 @@ html, body, #root {
 .tiptap img.ProseMirror-selectednode {
   box-shadow: 0 0 0 3px var(--color-selection-border);
 }
+/* URL-screenshot cards: drop the rounded corners on the header image so
+   the open card matches the canvas-rest look (no radius). */
+.url-card-open .tiptap > img:first-child,
+.url-card-open .tiptap img:first-child {
+  border-radius: 0;
+}
+/* The wrapper is widened for the hero image (URL cards), but text and
+   other blocks underneath stay at the standard open reading width.
+   Mirrors CARD_OPEN_CONTENT_W in src/constants.ts. */
+.url-card-open .tiptap > *:not(img):not(.node-video) {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
 
 /* Media card (image/video) — fade in text below header media on open */
 .image-card-open .tiptap > img:first-child,

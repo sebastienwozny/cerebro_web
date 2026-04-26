@@ -23,7 +23,9 @@ import {
   Copy,
   Trash2,
   LayoutGrid,
+  Globe,
 } from "lucide-react";
+import { captureUrlScreenshot, looksLikeUrl } from "../lib/urlScreenshot";
 
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
@@ -375,7 +377,21 @@ export default function Canvas() {
       return;
     }
     const source = clipboardRef.current;
-    if (source.length === 0) return;
+    if (source.length === 0) {
+      // No internal clipboard — fall back to system clipboard. If it
+      // contains a URL, treat the paste as a "drop URL on canvas" gesture
+      // and capture a screenshot card. Permissions/CORS may reject this
+      // on web; silently no-op in that case.
+      try {
+        const text = await navigator.clipboard.readText();
+        if (text && looksLikeUrl(text)) {
+          await importUrlAsCard(text);
+        }
+      } catch {
+        /* clipboard.readText denied — nothing to paste */
+      }
+      return;
+    }
     const t = getTransform();
     const centerX = -t.offsetX / t.scale;
     const centerY = -t.offsetY / t.scale;
@@ -430,6 +446,31 @@ export default function Canvas() {
     const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
     await createNoteAt(canvasX, canvasY);
   }, [getTransform, createNoteAt]);
+
+  // URL → screenshot card. Microlink free tier (50/day) for now; will be
+  // swapped for a self-hosted Puppeteer endpoint on Hostinger later.
+  const [urlInputOpen, setUrlInputOpen] = useState(false);
+  const [urlPending, setUrlPending] = useState(false);
+  const importUrlAsCard = useCallback(async (url: string) => {
+    setUrlPending(true);
+    try {
+      const { block, title } = await captureUrlScreenshot(url);
+      const t = getTransform();
+      const spread = 40;
+      const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
+      const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+      const noteId = crypto.randomUUID();
+      triggerPop([noteId]);
+      undoStack.record({ type: "create", noteIds: [noteId] });
+      await addNote(canvasX, canvasY, noteId, block, title ?? undefined);
+    } catch (err) {
+      console.error("URL screenshot failed:", err);
+      alert(`Couldn't capture screenshot: ${(err as Error).message ?? err}`);
+    } finally {
+      setUrlPending(false);
+      setUrlInputOpen(false);
+    }
+  }, [addNote, getTransform, triggerPop]);
 
   // Double-click to create
   const handleDoubleClick = useCallback(
@@ -921,6 +962,32 @@ export default function Canvas() {
         />
       )}
 
+      {/* URL → screenshot card popover */}
+      {urlInputOpen && !canvasLocked && (
+        <div
+          className="fixed bottom-22 right-6 z-(--z-fab) bg-card text-text-primary rounded-xl shadow-fab p-3 flex gap-2 items-center"
+          style={{ minWidth: 360 }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <input
+            type="url"
+            autoFocus
+            disabled={urlPending}
+            placeholder="Paste a URL — captures full-page screenshot"
+            className="flex-1 bg-transparent outline-none border-none text-sm placeholder:text-text-muted"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const v = (e.target as HTMLInputElement).value.trim();
+                if (v) importUrlAsCard(v);
+              } else if (e.key === "Escape") {
+                setUrlInputOpen(false);
+              }
+            }}
+          />
+          {urlPending && <span className="text-xs text-text-muted">Capturing…</span>}
+        </div>
+      )}
+
       {/* Add note / image / video buttons */}
       {!canvasLocked && (
         <div className="fixed bottom-6 right-6 flex gap-2 z-(--z-fab)">
@@ -938,6 +1005,14 @@ export default function Canvas() {
             className="hidden"
             onChange={handleVideoInput}
           />
+          <button
+            className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
+            title="Capture web page"
+            onDoubleClick={(e) => e.stopPropagation()}
+            onClick={() => setUrlInputOpen(v => !v)}
+          >
+            <Globe size={20} />
+          </button>
           <button
             className="w-12 h-12 rounded-full flex items-center justify-center cursor-pointer border-none select-none bg-card text-text-muted shadow-fab"
             title="Add video"
