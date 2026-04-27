@@ -715,7 +715,10 @@ function NoteCard({
         // (before t>0), so the cursorInside reset that happens on shadow mount
         // doesn't trigger a pause()+seek(0) mid-playback — which was the cause
         // of the visible saccade at open start.
-        const playing = !!(playingHover || isShadowInstance || t > 0 || isResizing || isClosing || isSelected);
+        // Always pause while a card is being moved (this card directly via
+        // isDragging, or as a follower in a group drag via isFollowing).
+        const beingMoved = isDragging || isFollowing;
+        const playing = !beingMoved && !!(playingHover || isShadowInstance || t > 0 || isResizing || isClosing || isSelected);
         const unlocked = editing;
         const pointerEvents = editing ? "auto" : "none";
 
