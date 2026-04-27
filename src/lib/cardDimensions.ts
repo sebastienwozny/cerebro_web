@@ -79,3 +79,36 @@ export function getCardSize(note: Pick<Note, "blocks" | "cardScale">) {
   const baseH = header && header.aspect > 0 ? IMAGE_CARD_BASE_W * header.aspect : CARD_H;
   return { w: baseW * s, h: baseH * s };
 }
+
+/** Width range for the hero media (image / video poster) on an open card.
+ *  Endpoints are continuous: very-landscape → MAX_W, very-portrait → MIN_W. */
+export const OPEN_MEDIA_MAX_W = 1080;
+export const OPEN_MEDIA_MIN_W = 640;
+
+/**
+ * Compute the open-card hero media display size. `aspect = h/w`, so
+ *   aspect = 0.5 (e.g. 16:9 landscape) maps to MAX_W,
+ *   aspect = 1.5 (e.g. 2:3 portrait)  maps to MIN_W,
+ *   anything beyond either end is clamped.
+ *
+ * Caps:
+ *   - width never exceeds the viewport (with 80px margins).
+ *   - height never exceeds 75vh — for very tall portraits the width is
+ *     scaled back so the text below the hero stays visible.
+ */
+export function getOpenMediaSize(
+  aspect: number,
+  windowW: number,
+  windowH: number,
+): { width: number; height: number } {
+  const t = Math.max(0, Math.min(1, aspect - 0.5));
+  let width = OPEN_MEDIA_MAX_W * (1 - t) + OPEN_MEDIA_MIN_W * t;
+  width = Math.min(width, windowW - 80);
+  const maxH = windowH * 0.75;
+  if (width * aspect > maxH) width = maxH / aspect;
+  // Floor: never narrower than the text reading column. Tall portraits
+  // beyond `maxH` are allowed to overflow vertically — the open card
+  // scrolls — rather than collapsing to a sub-text-width sliver.
+  width = Math.max(width, OPEN_MEDIA_MIN_W);
+  return { width, height: width * aspect };
+}

@@ -6,7 +6,7 @@ import { useCardHover } from "../hooks/useCardHover";
 import { useCardResize } from "../hooks/useCardResize";
 import { useImageBrightness } from "../hooks/useImageBrightness";
 import { CARD_CONTENT_W } from "../constants";
-import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
+import { getCardSize, getHeaderMedia, getOpenMediaSize, OPEN_MEDIA_MAX_W } from "../lib/cardDimensions";
 import PersistentVideoPlayer, { prewarmAudio } from "./PersistentVideoPlayer";
 
 interface Props {
@@ -572,29 +572,56 @@ function NoteCard({
           data-editor-overlay
           className="fixed inset-0 overflow-y-auto flex justify-center z-(--z-editor-overlay) pt-25 pb-10 px-5 bg-card-open"
         >
-          <div
-            className={[
-              isImageCard ? "image-card-open" : "",
-              isUrlCard ? "url-card-open" : "",
-            ].filter(Boolean).join(" ") || undefined}
-            style={{
+          {(() => {
+            // Aspect-aware hero width on image/video cards: landscape → wider,
+            // portrait → narrower. The wrapper max-width is the wider of the
+            // hero and the text reading column (CARD_CONTENT_W) so the hero
+            // can extend past the text width without clipping. CSS
+            // (`.image-card-open`) re-narrows non-hero blocks back to the
+            // reading column via `--hero-w`.
+            const heroSize = isMediaCard && headerMedia && !isUrlCard
+              ? getOpenMediaSize(headerMedia.aspect, windowW, windowH)
+              : null;
+            const wrapperMaxW = isUrlCard
+              ? Math.min(windowW - 80, OPEN_MEDIA_MAX_W)
+              : heroSize
+                ? Math.max(heroSize.width, CARD_CONTENT_W)
+                : CARD_CONTENT_W;
+            const wrapperStyle: React.CSSProperties = {
               width: "100%",
-              maxWidth: isUrlCard ? Math.min(windowW - 80, 980) : CARD_CONTENT_W,
-            }}
-          >
-            {children}
-          </div>
+              maxWidth: wrapperMaxW,
+            };
+            if (heroSize) {
+              (wrapperStyle as React.CSSProperties & Record<string, string>)[
+                "--hero-w"
+              ] = `${heroSize.width}px`;
+            }
+            return (
+              <div
+                className={[
+                  isImageCard ? "image-card-open" : "",
+                  isUrlCard ? "url-card-open" : "",
+                ].filter(Boolean).join(" ") || undefined}
+                style={wrapperStyle}
+              >
+                {children}
+              </div>
+            );
+          })()}
         </div>
       )}
 
       {/* Hero image for image-card open/close transition — portal so it's not
           clipped. Video cards use PersistentVideoPlayer below instead. */}
       {!isShadowInstance && isMediaCard && headerMedia?.type === "image" && t > 0 && !editing && headerDataUrl && (() => {
-        // URL-screenshot cards open with a wider hero (text below stays
-        // at CARD_CONTENT_W via the .url-card-open CSS rule).
-        const heroW = isUrlCard ? Math.min(windowW - 80, 980) : CARD_CONTENT_W;
-        const editorImgW = heroW;
-        const editorImgH = heroW * headerMedia.aspect;
+        // URL-screenshot cards open with a wider hero. Other image cards
+        // size the hero by aspect ratio (landscape wider, portrait narrower)
+        // via `getOpenMediaSize`, capped by the viewport.
+        const sized = isUrlCard
+          ? { width: Math.min(windowW - 80, OPEN_MEDIA_MAX_W), height: Math.min(windowW - 80, OPEN_MEDIA_MAX_W) * headerMedia.aspect }
+          : getOpenMediaSize(headerMedia.aspect, windowW, windowH);
+        const editorImgW = sized.width;
+        const editorImgH = sized.height;
         const editorImgX = (windowW - editorImgW) / 2;
         const editorImgY = 100;
 
@@ -647,8 +674,9 @@ function NoteCard({
         // to the JPEG poster, which goes through a different color path and
         // reads lighter than the native video rendering.
 
-        const editorImgW = CARD_CONTENT_W;
-        const editorImgH = CARD_CONTENT_W * headerMedia.aspect;
+        const sized = getOpenMediaSize(headerMedia.aspect, windowW, windowH);
+        const editorImgW = sized.width;
+        const editorImgH = sized.height;
         const editorImgX = (windowW - editorImgW) / 2;
         const editorImgY = 100;
 

@@ -191,7 +191,7 @@ html, body, #root {
 .tiptap a:hover, .tiptap .editor-link:hover,
 .tiptap a.link-hovered, .tiptap .editor-link.link-hovered {
   color: var(--floating-tooltip-text);
-  text-decoration-color: rgba(160, 160, 160, 0.75);
+  text-decoration-color: rgba(220, 220, 220, 0.95);
 }
 
 /* Floating "Open" pill shown on link hover. Visually matches the
@@ -654,13 +654,34 @@ html, body, #root {
   margin-right: auto;
 }
 
-/* Media card (image/video) — fade in text below header media on open */
+/* Media card (image/video) — fade in text below header media on open.
+   Only the FIRST image / first video (the hero) gets the aspect-aware
+   width set by `--hero-w`. Everything else underneath — body text, and
+   any image/video added later — is constrained to the reading column
+   so a wide landscape hero doesn't drag body content out to a
+   hard-to-read width. */
+.image-card-open .tiptap > * {
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
+}
 .image-card-open .tiptap > img:first-child,
 .image-card-open .tiptap > .node-video:first-child {
   margin-top: 0;
+  width: var(--hero-w, 100%);
+  max-width: 100%;
 }
 .image-card-open .tiptap > *:not(img):not(.node-video) {
   animation: fadeIn 0.3s cubic-bezier(0.33, 1, 0.68, 1);
+}
+/* Breathing room around non-hero media in open cards (image OR URL).
+   The hero's margins are handled separately above. */
+.image-card-open .tiptap > img:not(:first-child),
+.image-card-open .tiptap > .node-video:not(:first-child),
+.url-card-open .tiptap > img:not(:first-child),
+.url-card-open .tiptap > .node-video:not(:first-child) {
+  margin-top: 32px;
+  margin-bottom: 32px;
 }
 
 /* Media card — fade out text during close, hide tiptap header (hero handles it) */
