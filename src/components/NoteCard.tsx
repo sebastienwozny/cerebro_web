@@ -59,6 +59,15 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
+/** Quadratic Bezier interpolation: P(t) = (1-t)²·P0 + 2(1-t)t·C + t²·P1.
+ *  Used to bend the card's open/close trajectory into an arc instead of
+ *  a straight line — the control point is positioned above the segment
+ *  midpoint, so the path bows upward. */
+function qbez(p0: number, c: number, p1: number, t: number): number {
+  const u = 1 - t;
+  return u * u * p0 + 2 * u * t * c + t * t * p1;
+}
+
 const CORNER_PATH = "M65.4004 5.39844C65.4004 38.5355 38.5375 65.3984 5.40039 65.3984";
 const CORNER_VIEWBOX = "0 0 71 71";
 const CORNER_INSET = 15;
@@ -252,8 +261,28 @@ function NoteCard({
   const cardScreenTop = windowH / 2 + posY * scale + offsetY - (cardH * scale) / 2;
 
   const scl = t > 0 ? lerp(scale, 1, t) : 1;
-  const visualLeft = t > 0 ? lerp(cardScreenLeft, screenLeft, t) : canvasLeft;
-  const visualTop = t > 0 ? lerp(cardScreenTop, screenTop, t) : canvasTop;
+  // Open/close path is a quadratic Bezier with the control point pushed
+  // *below* the midpoint so the card sags downward along its trajectory
+  // — visually reads as "coming from below" toward the open position.
+  // Arc height scales with travel distance (capped) so short hops don't
+  // get a giant useless bow.
+  let visualLeft: number;
+  let visualTop: number;
+  if (t > 0) {
+    const midX = (cardScreenLeft + screenLeft) / 2;
+    const midY = (cardScreenTop + screenTop) / 2;
+    const dx = screenLeft - cardScreenLeft;
+    const dy = screenTop - cardScreenTop;
+    const dist = Math.hypot(dx, dy);
+    const arcHeight = Math.min(dist * 0.15, 100);
+    const ctrlX = midX;
+    const ctrlY = midY + arcHeight;
+    visualLeft = qbez(cardScreenLeft, ctrlX, screenLeft, t);
+    visualTop = qbez(cardScreenTop, ctrlY, screenTop, t);
+  } else {
+    visualLeft = canvasLeft;
+    visualTop = canvasTop;
+  }
   const visualWidth = t > 0 ? cardW * scl : cardW;
   const visualHeight = t > 0 ? lerp(cardH * scale, Math.max(baseH, windowH), t) : cardH;
   const innerW = t > 0 ? cardW : cardW;
@@ -574,14 +603,21 @@ function NoteCard({
         const targetW = isClosing && closingImgRect.current ? closingImgRect.current.w : editorImgW;
         const targetH = isClosing && closingImgRect.current ? closingImgRect.current.h : editorImgH;
 
+        // Match the qbez arc used by NoteCard / PVP so the hero image
+        // travels along the same curved path during open/close.
+        const hMidX = (cardScreenLeft + targetX) / 2;
+        const hMidY = (cardScreenTop + targetY) / 2;
+        const hDist = Math.hypot(targetX - cardScreenLeft, targetY - cardScreenTop);
+        const hArc = Math.min(hDist * 0.15, 100);
+
         return createPortal(
           <img
             src={headerDataUrl}
             alt=""
             style={{
               position: "fixed",
-              left: lerp(cardScreenLeft, targetX, t),
-              top: lerp(cardScreenTop, targetY, t),
+              left: qbez(cardScreenLeft, hMidX, targetX, t),
+              top: qbez(cardScreenTop, hMidY + hArc, targetY, t),
               width: lerp(cardW * scale, targetW, t),
               height: lerp(cardH * scale, targetH, t),
               objectFit: "cover",

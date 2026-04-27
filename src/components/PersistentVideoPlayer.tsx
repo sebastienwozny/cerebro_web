@@ -107,6 +107,13 @@ interface Props {
  */
 function lerp(a: number, b: number, t: number) { return a + (b - a) * t; }
 
+/** Quadratic Bezier — same arc shape as NoteCard's open/close path so
+ *  video cards travel along the matching curve. */
+function qbez(p0: number, c: number, p1: number, t: number): number {
+  const u = 1 - t;
+  return u * u * p0 + 2 * u * t * c + t * t * p1;
+}
+
 // Module-level cache: one <video> element per blockId, survives NoteCard
 // unmount/remount cycles (e.g. viewport culling during canvas pan). Without
 // this, panning away and back creates a fresh element with no buffered data —
@@ -444,8 +451,17 @@ function PersistentVideoPlayerImpl({
         transform: "translateZ(0)",
       };
     } else {
-      const x = lerp(canvasRect.left, openRect.left, t);
-      const y = lerp(canvasRect.top, openRect.top, t);
+      // Arc trajectory — match NoteCard's qbez so video cards follow the
+      // same path during open/close. Control point is below the midpoint
+      // so the card appears to come from below.
+      const midX = (canvasRect.left + openRect.left) / 2;
+      const midY = (canvasRect.top + openRect.top) / 2;
+      const dx = openRect.left - canvasRect.left;
+      const dy = openRect.top - canvasRect.top;
+      const dist = Math.hypot(dx, dy);
+      const arcHeight = Math.min(dist * 0.15, 100);
+      const x = qbez(canvasRect.left, midX, openRect.left, t);
+      const y = qbez(canvasRect.top, midY + arcHeight, openRect.top, t);
       const rot = rotationDeg * (1 - t);
       const isDragMode = Math.abs(rot) > 0.001;
       outerPositionStyle = {
