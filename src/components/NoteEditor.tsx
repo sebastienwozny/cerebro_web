@@ -12,6 +12,7 @@ import AutoJoiner from "tiptap-extension-auto-joiner";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBlockHandle } from "../hooks/useBlockHandle";
 import { useLinkMode } from "../hooks/useLinkMode";
+import { useLinkHoverPopup } from "../hooks/useLinkHoverPopup";
 import { useEditorDragScroll } from "../hooks/useEditorDragScroll";
 import type { NoteBlock } from "../store/db";
 import { blocksToHtml, htmlToBlocks } from "../lib/blockSerializer";
@@ -501,6 +502,14 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   enterLinkModeRef.current = enterLinkMode;
   linkOnSelectionChangeRef.current = onLinkSelectionChange;
 
+  const {
+    popup: linkHoverPopup,
+    visible: linkHoverVisible,
+    onPopupEnter: onLinkPopupEnter,
+    onPopupLeave: onLinkPopupLeave,
+    dismiss: dismissLinkPopup,
+  } = useLinkHoverPopup(editor);
+
   // Drop format-bar tooltips only when link mode *exits* (true → false), so
   // hovering the bar right after closing the link input doesn't flash
   // tooltips at the user's cursor. Re-enable whenever the toolbar hides, so
@@ -939,6 +948,26 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
           onSetFormatTooltips={setFormatTooltips}
           onSetLinkTooltips={setLinkTooltips}
         />,
+        document.body,
+      )}
+      {linkHoverPopup && createPortal(
+        <div
+          data-link-hover-popup
+          className={`link-hover-popup${linkHoverVisible ? " visible" : ""}`}
+          style={{ left: linkHoverPopup.left, top: linkHoverPopup.top }}
+          onMouseEnter={onLinkPopupEnter}
+          onMouseLeave={onLinkPopupLeave}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              window.open(linkHoverPopup.href, "_blank", "noopener,noreferrer");
+              dismissLinkPopup();
+            }}
+          >
+            Open <span aria-hidden>↗</span>
+          </button>
+        </div>,
         document.body,
       )}
       {editable && createPortal(

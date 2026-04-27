@@ -181,15 +181,63 @@ html, body, #root {
 
 /* Links */
 .tiptap a, .tiptap .editor-link {
-  color: var(--color-text);
+  color: var(--color-text-primary);
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-color: rgba(128, 128, 128, 0.6);
   cursor: text;
-  transition: text-decoration-color 0.15s ease-out;
+  transition: text-decoration-color 0.15s ease-out, color 0.15s ease-out;
 }
-.tiptap a:hover, .tiptap .editor-link:hover {
-  text-decoration-color: rgba(128, 128, 128, 0.8);
+.tiptap a:hover, .tiptap .editor-link:hover,
+.tiptap a.link-hovered, .tiptap .editor-link.link-hovered {
+  color: var(--floating-tooltip-text);
+  text-decoration-color: rgba(160, 160, 160, 0.75);
+}
+
+/* Floating "Open" pill shown on link hover. Visually matches the
+   `.app-tooltip` / `.floating-tooltip` pill used elsewhere in the app
+   (FormatToolbar, code-block buttons). Portaled to body, positioned
+   via fixed left/top — translate(-50%, -100%) anchors the wrapper's
+   bottom edge at the link's top. The wrapper's padding-bottom acts as
+   an invisible "bridge" so the cursor can cross from link → pill
+   without entering an unhovered dead zone. The pill itself is the
+   click target. */
+.link-hover-popup {
+  position: fixed;
+  z-index: var(--z-toolbar);
+  transform: translate(-50%, -100%);
+  padding-bottom: 8px;
+}
+.link-hover-popup button {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 9px;
+  line-height: 1.5;
+  font-weight: 600;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--floating-tooltip-bg);
+  color: var(--floating-tooltip-text);
+  border: 1px solid var(--floating-border);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  opacity: 0;
+  scale: 0.5;
+  translate: 0 8px;
+  transition:
+    opacity 100ms cubic-bezier(0.65, 0, 1, 1),
+    scale 100ms cubic-bezier(0.65, 0, 1, 1),
+    translate 100ms cubic-bezier(0.65, 0, 1, 1);
+}
+.link-hover-popup.visible button {
+  opacity: 1;
+  scale: 1;
+  translate: 0 0;
+  transition:
+    opacity 100ms cubic-bezier(0, 0, 0.35, 1),
+    scale 100ms cubic-bezier(0, 0, 0.35, 1),
+    translate 100ms cubic-bezier(0, 0, 0.35, 1);
 }
 
 /* Lists — aligned with checkboxes, no indent */
