@@ -448,25 +448,23 @@ function NoteCard({
           />
 
           {/* Editor content (card mode — clipped). Image cards: only
-              during close. The bottom fade is a `mask-image` directly on
-              this wrapper instead of a separate gradient overlay div: the
-              text content fades to transparent at the bottom, revealing
-              the card background div underneath. The previous overlay
-              gradient produced visible sub-pixel stipple along the card's
-              bottom edge because of AA mismatches between its rasterized
-              edge and cardRef's clip under transform scaling. */}
+              during close. Bottom fade is a `mask-image` on the wrapper
+              (replaces the previous gradient overlay div, whose AA edge
+              produced sub-pixel stipple under transform scaling). For
+              text cards we mask the bottom 200px regardless of
+              openProgress; the wrapper unmounts at `editing=true` and
+              the editor overlay takes over. */}
           {!editing && (!isImageCard || (isClosing && t > 0)) && (
             <div
               className="absolute inset-0 flex justify-center pointer-events-none pt-25"
               style={{
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
-                maskImage: !isImageCard && openProgress < 0.1
+                maskImage: !isImageCard
                   ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
                   : undefined,
-                WebkitMaskImage: !isImageCard && openProgress < 0.1
+                WebkitMaskImage: !isImageCard
                   ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
                   : undefined,
-                opacity: !isImageCard && openProgress < 0.1 ? 1 - openProgress * 10 : 1,
               }}
             >
               <div className={isImageCard ? "image-card-closing" : undefined} style={{ width: CARD_CONTENT_W, ...(isImageCard ? { "--text-fade": t } as React.CSSProperties : {}) }}>
@@ -532,7 +530,7 @@ function NoteCard({
             ].filter(Boolean).join(" ") || undefined}
             style={{
               width: "100%",
-              maxWidth: isUrlCard ? Math.min(windowW - 80, 1000) : CARD_CONTENT_W,
+              maxWidth: isUrlCard ? Math.min(windowW - 80, 980) : CARD_CONTENT_W,
             }}
           >
             {children}
@@ -543,9 +541,9 @@ function NoteCard({
       {/* Hero image for image-card open/close transition — portal so it's not
           clipped. Video cards use PersistentVideoPlayer below instead. */}
       {!isShadowInstance && isMediaCard && headerMedia?.type === "image" && t > 0 && !editing && headerDataUrl && (() => {
-        // URL-screenshot cards open with a wider hero (text below stays at
-        // CARD_CONTENT_W via the .url-card-open CSS rule).
-        const heroW = isUrlCard ? Math.min(windowW - 80, 1000) : CARD_CONTENT_W;
+        // URL-screenshot cards open with a wider hero (text below stays
+        // at CARD_CONTENT_W via the .url-card-open CSS rule).
+        const heroW = isUrlCard ? Math.min(windowW - 80, 980) : CARD_CONTENT_W;
         const editorImgW = heroW;
         const editorImgH = heroW * headerMedia.aspect;
         const editorImgX = (windowW - editorImgW) / 2;

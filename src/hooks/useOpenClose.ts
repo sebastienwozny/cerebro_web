@@ -3,10 +3,43 @@ import gsap from "gsap";
 import type { CanvasTransform } from "../store/useCanvas";
 import { OPEN_DURATION, CLOSE_DURATION } from "../constants";
 
+export interface AnimTuning {
+  openDuration: number;
+  openEase: string;
+  closeDuration: number;
+  closeEase: string;
+}
+
+export const DEFAULT_ANIM_TUNING: AnimTuning = {
+  openDuration: OPEN_DURATION,
+  openEase: "power3.out",
+  closeDuration: CLOSE_DURATION,
+  closeEase: "power3.out",
+};
+
+/** Per-card-type animation overrides. The active tuning for an open
+ *  session is picked at openNote() time (passed as a 2nd arg) and
+ *  reused for the matching close. */
+export const URL_CARD_ANIM_TUNING: AnimTuning = {
+  openDuration: 0.8,
+  openEase: "power3.out",
+  closeDuration: 0.8,
+  closeEase: "power3.out",
+};
+
 export function useOpenClose(
   bringToFront: (id: string) => void,
   getTransform: () => CanvasTransform,
+  tuning: AnimTuning = DEFAULT_ANIM_TUNING,
 ) {
+  // Live-read ref so the in-flight tween reads the latest tuning each
+  // call without us threading the value through every render.
+  const tuningRef = useRef(tuning);
+  tuningRef.current = tuning;
+  // Per-call override set at openNote time. Used for the matching
+  // close so a card always animates with its own pace. Cleared on
+  // close completion.
+  const sessionTuningRef = useRef<AnimTuning | null>(null);
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [openProgress, setOpenProgress] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
@@ -16,7 +49,8 @@ export function useOpenClose(
   const tweenRef = useRef<gsap.core.Tween | null>(null);
 
   const openNote = useCallback(
-    (id: string) => {
+    (id: string, override?: AnimTuning) => {
+      sessionTuningRef.current = override ?? null;
       bringToFront(id);
       setOpenTransform({ ...getTransform() });
       setOpenNoteId(id);
@@ -28,10 +62,11 @@ export function useOpenClose(
       progressRef.current.value = 0.001;
       setOpenProgress(0.001);
       tweenRef.current?.kill();
+      const t = sessionTuningRef.current ?? tuningRef.current;
       tweenRef.current = gsap.to(progressRef.current, {
         value: 1,
-        duration: OPEN_DURATION,
-        ease: "power3.out",
+        duration: t.openDuration,
+        ease: t.openEase,
         onUpdate: () => setOpenProgress(progressRef.current.value),
       });
     },
@@ -43,16 +78,18 @@ export function useOpenClose(
     setClosingScrollOffset(scrollEl?.scrollTop ?? 0);
     setIsClosing(true);
     tweenRef.current?.kill();
+    const t = sessionTuningRef.current ?? tuningRef.current;
     tweenRef.current = gsap.to(progressRef.current, {
       value: 0,
-      duration: CLOSE_DURATION,
-      ease: "power3.out",
+      duration: t.closeDuration,
+      ease: t.closeEase,
       onUpdate: () => setOpenProgress(progressRef.current.value),
       onComplete: () => {
         progressRef.current.value = 0;
         setOpenProgress(0);
         setOpenNoteId(null);
         setClosingScrollOffset(0);
+        sessionTuningRef.current = null;
       },
     });
   }, []);

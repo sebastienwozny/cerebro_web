@@ -7,8 +7,8 @@ export const CARD_CONTENT_W = 680;
 export const CARD_RADIUS = 100;
 
 // Open/close animation durations (seconds)
-export const OPEN_DURATION = 0.5;
-export const CLOSE_DURATION = 0.5;
+export const OPEN_DURATION = 0.6;
+export const CLOSE_DURATION = 0.6;
 
 // Delete animation duration (seconds) — matches CSS transition in NoteCard
 export const DELETE_DURATION = 0.4;

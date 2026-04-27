@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { useNotes } from "../store/useNotes";
 import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
-import { useOpenClose } from "../hooks/useOpenClose";
+import { useOpenClose, DEFAULT_ANIM_TUNING, URL_CARD_ANIM_TUNING, type AnimTuning } from "../hooks/useOpenClose";
+import AnimTuningPanel from "../components/AnimTuningPanel";
 import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
@@ -66,8 +67,9 @@ export default function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const windowSize = useWindowSize();
 
+  const [animTuning, setAnimTuning] = useState<AnimTuning>(DEFAULT_ANIM_TUNING);
   const { openNoteId, openProgress, isClosing, closingScrollOffset, openTransform, openNote, closeNote } =
-    useOpenClose(bringToFront, getTransform);
+    useOpenClose(bringToFront, getTransform, animTuning);
 
   const canvasLocked = openNoteId !== null;
   const { spaceHeld, handlePointerDown: spacePanDown, handlePointerMove: spacePanMove, handlePointerUp: spacePanUp } =
@@ -492,8 +494,14 @@ export default function Canvas() {
   } = useCanvasMediaImport({ canvasLocked, windowSize, getTransform, createNote: createNoteAt });
 
   const handleCardTap = useCallback(
-    (noteId: string) => { clearSelection(); openNote(noteId); },
-    [openNote, clearSelection]
+    (noteId: string) => {
+      clearSelection();
+      const note = notes.find(n => n.id === noteId);
+      const header = note ? getHeaderMedia(note) : null;
+      const isUrlCard = header?.type === "image" && !!header.sourceUrl;
+      openNote(noteId, isUrlCard ? URL_CARD_ANIM_TUNING : undefined);
+    },
+    [openNote, clearSelection, notes]
   );
 
   const handleCardShiftTap = useCallback(
@@ -1052,6 +1060,10 @@ export default function Canvas() {
           Double-click to create a note
         </div>
       )}
+
+      {/* Dev tool: open/close animation tuning */}
+      <AnimTuningPanel value={animTuning} onChange={setAnimTuning} />
+
 
       {/* Context menu */}
       {contextMenu && !canvasLocked && (

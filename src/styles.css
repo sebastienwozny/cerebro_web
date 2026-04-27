@@ -595,8 +595,12 @@ html, body, #root {
 }
 /* The wrapper is widened for the hero image (URL cards), but text and
    other blocks underneath stay at the standard open reading width.
-   Mirrors CARD_CONTENT_W in src/constants.ts. */
-.url-card-open .tiptap > *:not(img):not(.node-video) {
+   Mirrors CARD_CONTENT_W in src/constants.ts. Only the FIRST image
+   (the screenshot header) gets the wide treatment — any image added
+   later in the body is treated like text. */
+.url-card-open .tiptap > *:not(img):not(.node-video),
+.url-card-open .tiptap > img:not(:first-child),
+.url-card-open .tiptap > .node-video:not(:first-child) {
   max-width: 720px;
   margin-left: auto;
   margin-right: auto;
