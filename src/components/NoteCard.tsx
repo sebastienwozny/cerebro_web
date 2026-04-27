@@ -129,11 +129,8 @@ function NoteCard({
     : null;
 
   const { w: cardW, h: cardH } = getCardSize(note);
-  // URL-screenshot cards are rendered without rounded corners — they're
-  // typically full-bleed page captures and the radius would clip page
-  // chrome (top bars, headers) awkwardly.
   const isUrlCard = headerMedia?.type === "image" && !!headerMedia.sourceUrl;
-  const cardRadius = isUrlCard ? 0 : Math.max(Math.min(cardW, cardH) * 0.07, 50);
+  const cardRadius = Math.max(Math.min(cardW, cardH) * 0.07, 50);
   const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
   const { isDragging, isPressed, dragRotation, handlePointerDown } = useCardDrag({
@@ -262,7 +259,11 @@ function NoteCard({
   // or inside the PVP overlay (video cards, since the PVP covers the card).
   const cornerOverlay = isImageCard && openProgress === 0 && !isDragging ? (() => {
     const showCorners = isPointerOver && !hoverSuppressed && !isSelected;
-    const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.10), 70);
+    // Corner handles match the card's rounded corner curve. The card
+    // radius formula was tightened from 0.10 to 0.07 above; mirror that
+    // here so the handle's arc roughly traces the card's actual curve
+    // instead of extending well past it onto the straight edge.
+    const cornerSize = Math.max(Math.round(Math.min(cardW, cardH) * 0.07), 50);
     const strokeColor = isLightImage ? "rgba(0,0,0,0.25)" : "rgba(255,255,255,0.35)";
     return (
       <>
@@ -568,7 +569,7 @@ function NoteCard({
               objectFit: "cover",
               zIndex: "var(--z-editor-controls)",
               pointerEvents: "none",
-              borderRadius: lerp(cardRadius * scale, isUrlCard ? 0 : 6, t),
+              borderRadius: lerp(cardRadius * scale, 6, t),
             }}
             draggable={false}
             decoding="async"
@@ -602,7 +603,7 @@ function NoteCard({
           top: editorImgY,
           width: editorImgW,
           height: editorImgH,
-          borderRadius: isUrlCard ? 0 : 6,
+          borderRadius: 6,
         };
         const portalToBody = isShadowInstance || t > 0 || isClosing;
         const canvasRect = portalToBody
