@@ -37,11 +37,14 @@ export function useNotes() {
     id?: string,
     initialMediaBlock?: NoteBlock,
     initialTitle?: string,
+    initialSecondBlock?: NoteBlock,
   ): Promise<Note> {
     const maxZ = getMaxZ(notes);
-    const titleBlock: NoteBlock = initialTitle
-      ? { ...makeBlock("heading1"), content: initialTitle }
-      : makeBlock("text");
+    const titleBlock: NoteBlock = initialSecondBlock
+      ? initialSecondBlock
+      : initialTitle
+        ? { ...makeBlock("heading1"), content: initialTitle }
+        : makeBlock("text");
     const blocks: NoteBlock[] = initialMediaBlock
       ? [initialMediaBlock, titleBlock]
       : [makeBlock("heading1")];

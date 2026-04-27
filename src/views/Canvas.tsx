@@ -27,6 +27,7 @@ import {
   Globe,
 } from "lucide-react";
 import { captureUrlScreenshot, looksLikeUrl } from "../lib/urlScreenshot";
+import { isXUrl, importXAsBlocks } from "../lib/xPostImport";
 
 const undoStack = new CanvasUndoStack();
 const ZERO_DELTA = { dx: 0, dy: 0 };
@@ -456,18 +457,46 @@ export default function Canvas() {
   const importUrlAsCard = useCallback(async (url: string) => {
     setUrlPending(true);
     try {
-      const { block, title } = await captureUrlScreenshot(url);
       const t = getTransform();
       const spread = 40;
-      const canvasX = -t.offsetX / t.scale + (Math.random() - 0.5) * spread;
-      const canvasY = -t.offsetY / t.scale + (Math.random() - 0.5) * spread;
+      const baseX = -t.offsetX / t.scale;
+      const baseY = -t.offsetY / t.scale;
+
+      if (isXUrl(url)) {
+        // Twitter/X: import each media as its own card with the tweet URL
+        // as a text block underneath. Cards spread along x so they don't
+        // stack on top of each other.
+        const items = await importXAsBlocks(url);
+        const createdIds: string[] = [];
+        for (let i = 0; i < items.length; i++) {
+          const { block, link } = items[i];
+          const offsetX = (i - (items.length - 1) / 2) * (CARD_W + 60);
+          const noteId = crypto.randomUUID();
+          createdIds.push(noteId);
+          await addNote(
+            baseX + offsetX,
+            baseY + (Math.random() - 0.5) * spread,
+            noteId,
+            block,
+            undefined,
+            link,
+          );
+        }
+        triggerPop(createdIds);
+        undoStack.record({ type: "create", noteIds: createdIds });
+        return;
+      }
+
+      const { block, title } = await captureUrlScreenshot(url);
+      const canvasX = baseX + (Math.random() - 0.5) * spread;
+      const canvasY = baseY + (Math.random() - 0.5) * spread;
       const noteId = crypto.randomUUID();
       triggerPop([noteId]);
       undoStack.record({ type: "create", noteIds: [noteId] });
       await addNote(canvasX, canvasY, noteId, block, title ?? undefined);
     } catch (err) {
-      console.error("URL screenshot failed:", err);
-      alert(`Couldn't capture screenshot: ${(err as Error).message ?? err}`);
+      console.error("URL import failed:", err);
+      alert(`Couldn't import URL: ${(err as Error).message ?? err}`);
     } finally {
       setUrlPending(false);
       setUrlInputOpen(false);
