@@ -587,7 +587,7 @@ html, body, #root {
   width: 100%;
   display: block;
   margin: 12px 0;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: box-shadow 150ms;
 }
 .tiptap img.ProseMirror-selectednode {

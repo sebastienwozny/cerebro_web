@@ -121,6 +121,17 @@ export const ImageWithAspect = BaseImage.extend({
           return { "data-source-url": String(attrs.sourceUrl) };
         },
       },
+      // Original full-fidelity source (e.g. PNG before client-side
+      // re-encoding to AVIF/WebP). Used by the Download action to save
+      // the HD copy instead of the compressed display copy.
+      srcOriginal: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-src-original"),
+        renderHTML: (attrs: Record<string, unknown>) => {
+          if (!attrs.srcOriginal) return {};
+          return { "data-src-original": String(attrs.srcOriginal) };
+        },
+      },
     };
   },
 });

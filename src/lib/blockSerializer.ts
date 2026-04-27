@@ -76,7 +76,8 @@ export function blocksToHtml(blocks: NoteBlock[], videoUrls?: Map<string, string
       if (b.imageDataUrl) {
         const aspect = b.imageAspect ? ` data-aspect="${b.imageAspect}"` : "";
         const source = b.imageSourceUrl ? ` data-source-url="${escapeHtml(b.imageSourceUrl)}"` : "";
-        parts.push(`<img src="${b.imageDataUrl}"${aspect}${source} />`);
+        const original = b.imageDataUrlOriginal ? ` data-src-original="${b.imageDataUrlOriginal}"` : "";
+        parts.push(`<img src="${b.imageDataUrl}"${aspect}${source}${original} />`);
       }
       i++;
     } else if (b.type === "video") {
@@ -313,6 +314,7 @@ export function htmlToBlocks(
         imageDataUrl: (attrs?.src as string) ?? "",
         imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
         imageSourceUrl: (attrs?.sourceUrl as string | undefined) ?? undefined,
+        imageDataUrlOriginal: (attrs?.srcOriginal as string | undefined) ?? undefined,
       });
     } else if (node.type === "video") {
       const attrs = node.attrs as Record<string, unknown> | undefined;

@@ -728,7 +728,9 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     const target = getTargetBlock();
     if (!target) return;
     const { node } = target;
-    const src = node.attrs.src as string | null;
+    // Prefer the HD original (full-fidelity PNG kept alongside the
+    // compressed display copy on URL-screenshot cards) for download.
+    const src = (node.attrs.srcOriginal as string | null) ?? (node.attrs.src as string | null);
     if (!src) return;
     const MIME_EXT: Record<string, string> = {
       "image/jpeg": "jpg",

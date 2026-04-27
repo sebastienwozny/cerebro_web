@@ -21,11 +21,15 @@ export interface NoteBlock {
   type: BlockType;
   content: string;
   isChecked?: boolean;
-  imageDataUrl?: string; // base64 data URL (image blocks)
+  imageDataUrl?: string; // base64 data URL (image blocks) — display copy
   imageAspect?: number;  // height / width  (image blocks)
   imageSourceUrl?: string; // origin URL for screenshot-from-URL cards
                            // (used to flag the card as "URL screenshot" so
                            //  the canvas drops the rounded corners)
+  /** Optional full-fidelity copy of the image (e.g. the original PNG when
+   *  imageDataUrl has been re-encoded to AVIF/WebP for display speed).
+   *  When present, the Download action saves this version instead. */
+  imageDataUrlOriginal?: string;
   codeLanguage?: string; // hljs language id (codeBlock blocks)
   codeWrap?: boolean;    // wrap long lines instead of horizontal scroll
   // Video blocks store the media as a Blob (binary) in IndexedDB to avoid

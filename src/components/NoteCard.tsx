@@ -569,7 +569,7 @@ function NoteCard({
               objectFit: "cover",
               zIndex: "var(--z-editor-controls)",
               pointerEvents: "none",
-              borderRadius: lerp(cardRadius * scale, 6, t),
+              borderRadius: lerp(cardRadius * scale, 8, t),
             }}
             draggable={false}
             decoding="async"
@@ -603,7 +603,7 @@ function NoteCard({
           top: editorImgY,
           width: editorImgW,
           height: editorImgH,
-          borderRadius: 6,
+          borderRadius: 8,
         };
         const portalToBody = isShadowInstance || t > 0 || isClosing;
         const canvasRect = portalToBody
