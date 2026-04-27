@@ -133,7 +133,7 @@ function NoteCard({
   // typically full-bleed page captures and the radius would clip page
   // chrome (top bars, headers) awkwardly.
   const isUrlCard = headerMedia?.type === "image" && !!headerMedia.sourceUrl;
-  const cardRadius = isUrlCard ? 0 : Math.max(Math.min(cardW, cardH) * 0.10, 80);
+  const cardRadius = isUrlCard ? 0 : Math.max(Math.min(cardW, cardH) * 0.07, 50);
   const { w: baseW, h: baseH } = getCardSize({ ...note, cardScale: 1 });
 
   const { isDragging, isPressed, dragRotation, handlePointerDown } = useCardDrag({
@@ -436,6 +436,7 @@ function NoteCard({
             />
           )}
 
+
           {/* Selection border — white inside */}
           <div
             className="absolute inset-0 pointer-events-none border-4 border-selection-border transition-opacity duration-150 ease-out z-1"
@@ -445,31 +446,32 @@ function NoteCard({
             }}
           />
 
-          {/* Editor content (card mode — clipped). Image cards: only during close. */}
+          {/* Editor content (card mode — clipped). Image cards: only
+              during close. The bottom fade is a `mask-image` directly on
+              this wrapper instead of a separate gradient overlay div: the
+              text content fades to transparent at the bottom, revealing
+              the card background div underneath. The previous overlay
+              gradient produced visible sub-pixel stipple along the card's
+              bottom edge because of AA mismatches between its rasterized
+              edge and cardRef's clip under transform scaling. */}
           {!editing && (!isImageCard || (isClosing && t > 0)) && (
             <div
               className="absolute inset-0 flex justify-center pointer-events-none pt-25"
               style={{
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
+                maskImage: !isImageCard && openProgress < 0.1
+                  ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
+                  : undefined,
+                WebkitMaskImage: !isImageCard && openProgress < 0.1
+                  ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
+                  : undefined,
+                opacity: !isImageCard && openProgress < 0.1 ? 1 - openProgress * 10 : 1,
               }}
             >
               <div className={isImageCard ? "image-card-closing" : undefined} style={{ width: CARD_CONTENT_W, ...(isImageCard ? { "--text-fade": t } as React.CSSProperties : {}) }}>
                 {children}
               </div>
             </div>
-          )}
-
-          {/* Fade gradient (card mode) */}
-          {!isImageCard && openProgress < 0.1 && (
-            <div
-              className="absolute bottom-0 left-0 right-0 pointer-events-none"
-              style={{
-                height: 200,
-                background: "linear-gradient(to bottom, transparent 0%, var(--color-card) 70%)",
-                opacity: 1 - openProgress * 10,
-                borderRadius: `0 0 ${cardRadius}px ${cardRadius}px`,
-              }}
-            />
           )}
 
         </div>
@@ -480,6 +482,18 @@ function NoteCard({
             sit above the video. */}
         {!isVideoCard && cornerOverlay}
         </div>
+        {/* Hairline card border — text cards only (no header media).
+            Image/video/URL cards are full-bleed and the border would
+            sit awkwardly over the media. */}
+        {!isMediaCard && t === 0 && (
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              borderRadius: cardRadius,
+              border: "1px solid var(--color-card-border)",
+            }}
+          />
+        )}
       </div>
       </div>
       )}

@@ -4,6 +4,7 @@
 @theme {
   --color-canvas: #16181a;
   --color-card: #1f2426;
+  --color-card-border: rgba(255, 255, 255, 0.4); /* lift above card bg in dark mode */
   --color-card-open: #16181a;
   --color-text-primary: #e8e8e8;
   --color-text-muted: #888;
@@ -33,8 +34,8 @@
 
   /* ── Card shadows ── */
   --shadow-card-invisible: 0 10px 20px -12px rgba(0, 0, 0, 0), 0 32px 40px -8px rgba(0, 0, 0, 0);
-  --shadow-card-rest: 0 10px 20px -12px rgba(0, 0, 0, 0.05), 0 32px 40px -8px rgba(0, 0, 0, 0.02);
-  --shadow-card-hover: 0 20px 50px -10px rgba(0, 0, 0, 0.08), 0 50px 140px -15px rgba(0, 0, 0, 0.06);
+  --shadow-card-rest: 0 8px 24px rgba(0, 0, 0, 0.04), 0 32px 64px rgba(0, 0, 0, 0.02);
+  --shadow-card-hover: 0 16px 40px rgba(0, 0, 0, 0.06), 0 48px 120px rgba(0, 0, 0, 0.04);
   --shadow-card-selected: 0 0 0 8px var(--color-card), 0 4px 10px rgba(0, 0, 0, 0.05);
   --shadow-fab: 0 4px 12px rgba(0, 0, 0, 0.15);
   --color-checkbox-bg: #333;
@@ -79,6 +80,7 @@
   :root {
     --color-canvas: #e3e3e5;
     --color-card: #f2f2f2;
+    --color-card-border: rgba(0, 0, 0, 0.2); /* drop below card bg in light mode */
     --color-card-open: #f2f2f2;
     --color-text-primary: #1a1a1a;
     --color-text-muted: #666;
@@ -139,7 +141,7 @@ html, body, #root {
 }
 
 ::selection {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.4);
 }
 @media (prefers-color-scheme: light) {
   ::selection { background: rgba(0, 0, 0, 0.12); }
@@ -367,10 +369,10 @@ html, body, #root {
 }
 @media (prefers-color-scheme: light) {
   .tiptap .code-block-scroll {
-    scrollbar-color: rgba(0, 0, 0, 0.22) transparent;
+    scrollbar-color: rgba(0, 0, 0, 0.42) transparent;
   }
   .tiptap .code-block-scroll::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.22);
+    background: rgba(0, 0, 0, 0.42);
   }
   .tiptap .code-block-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(0, 0, 0, 0.35);

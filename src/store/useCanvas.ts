@@ -62,11 +62,22 @@ export function useCanvas() {
     scheduleRerender();
   }, [scheduleRerender]);
 
+  // Pixel-snapping: round pan offsets to integer device pixels and quantize
+  // the zoom scale to fine increments. Without this, the composed transform
+  // (translate(panX,panY) scale(zoom) translate(visualLeft,visualTop))
+  // resolves to fractional pixel coordinates after rasterization, which
+  // produces faint ghost lines along the rounded card edges (anti-aliased
+  // sub-pixel coverage drawn into a partially-covered output pixel). 0.001
+  // scale step is fine enough to feel smooth but coarse enough to avoid
+  // most fractional-pixel boundaries on standard card dimensions.
+  const SCALE_SNAP = 0.001;
+  const snapScale = (s: number) => Math.round(s / SCALE_SNAP) * SCALE_SNAP;
+
   const pan = useCallback(
     (dx: number, dy: number) => {
       const t = transformRef.current;
-      t.offsetX += dx;
-      t.offsetY += dy;
+      t.offsetX = Math.round(t.offsetX + dx);
+      t.offsetY = Math.round(t.offsetY + dy);
       applyTransform();
       scheduleSave();
     },
@@ -77,12 +88,12 @@ export function useCanvas() {
     (delta: number, cx: number, cy: number, windowW: number, windowH: number) => {
       const t = transformRef.current;
       const factor = Math.pow(ZOOM_SENSITIVITY, delta);
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor));
+      const newScale = snapScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, t.scale * factor)));
       const cursorFromCenterX = cx - windowW / 2;
       const cursorFromCenterY = cy - windowH / 2;
       const ratio = newScale / t.scale;
-      t.offsetX = cursorFromCenterX - ratio * (cursorFromCenterX - t.offsetX);
-      t.offsetY = cursorFromCenterY - ratio * (cursorFromCenterY - t.offsetY);
+      t.offsetX = Math.round(cursorFromCenterX - ratio * (cursorFromCenterX - t.offsetX));
+      t.offsetY = Math.round(cursorFromCenterY - ratio * (cursorFromCenterY - t.offsetY));
       t.scale = newScale;
       applyTransform();
       scheduleSave();
