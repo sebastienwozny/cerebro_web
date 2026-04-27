@@ -1,6 +1,7 @@
 import { useEditor } from "@tiptap/react";
 import { createLowlight, common } from "lowlight";
 import type { NoteBlock, BlockType } from "../store/db";
+import { getImageUrl } from "./imageUrlCache";
 
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -73,11 +74,19 @@ export function blocksToHtml(blocks: NoteBlock[], videoUrls?: Map<string, string
     const b = blocks[i];
     const c = b.content;
     if (b.type === "image") {
-      if (b.imageDataUrl) {
+      // Prefer the Blob (new path): emit a blob: URL that points
+      // straight at the binary buffer. Falls back to the legacy
+      // base64 dataURL for older blocks. The blockId is preserved as
+      // a data attribute so htmlToBlocks can look the Blob back up at
+      // save time (rather than baking the URL into the source-of-truth).
+      const src = b.imageBlob
+        ? getImageUrl(b.id, b.imageBlob)
+        : b.imageDataUrl;
+      if (src) {
         const aspect = b.imageAspect ? ` data-aspect="${b.imageAspect}"` : "";
         const source = b.imageSourceUrl ? ` data-source-url="${escapeHtml(b.imageSourceUrl)}"` : "";
-        const original = b.imageDataUrlOriginal ? ` data-src-original="${b.imageDataUrlOriginal}"` : "";
-        parts.push(`<img src="${b.imageDataUrl}"${aspect}${source}${original} />`);
+        const blockId = ` data-block-id="${b.id}"`;
+        parts.push(`<img src="${src}"${aspect}${source}${blockId} />`);
       }
       i++;
     } else if (b.type === "video") {
@@ -235,6 +244,7 @@ function inlineHtml(node: Record<string, unknown>): string {
 export function htmlToBlocks(
   editor: ReturnType<typeof useEditor>,
   videoBlobs?: Map<string, Blob>,
+  imageBlobs?: Map<string, { display?: Blob; original?: Blob; mimeType?: string; mimeTypeOriginal?: string }>,
 ): NoteBlock[] {
   if (!editor) return [];
   const json = editor.getJSON();
@@ -307,15 +317,37 @@ export function htmlToBlocks(
       }
     } else if (node.type === "image") {
       const attrs = node.attrs as Record<string, unknown> | undefined;
-      blocks.push({
-        id: crypto.randomUUID(),
-        type: "image",
-        content: "",
-        imageDataUrl: (attrs?.src as string) ?? "",
-        imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
-        imageSourceUrl: (attrs?.sourceUrl as string | undefined) ?? undefined,
-        imageDataUrlOriginal: (attrs?.srcOriginal as string | undefined) ?? undefined,
-      });
+      const blockId = (attrs?.blockId as string | undefined) ?? crypto.randomUUID();
+      const src = (attrs?.src as string) ?? "";
+      const isBlobSrc = src.startsWith("blob:");
+      // Prefer the blob attached via imageBlobs map (the source-of-truth
+      // for new image blocks). Falls back to the dataURL src for legacy
+      // blocks that haven't been migrated. blob: URLs without a matching
+      // map entry are dropped — the Blob lifecycle is bound to that map.
+      const meta = imageBlobs?.get(blockId);
+      if (meta?.display) {
+        blocks.push({
+          id: blockId,
+          type: "image",
+          content: "",
+          imageBlob: meta.display,
+          imageMimeType: meta.mimeType ?? meta.display.type,
+          imageBlobOriginal: meta.original,
+          imageMimeTypeOriginal: meta.mimeTypeOriginal ?? meta.original?.type,
+          imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
+          imageSourceUrl: (attrs?.sourceUrl as string | undefined) ?? undefined,
+        });
+      } else if (!isBlobSrc && src) {
+        blocks.push({
+          id: blockId,
+          type: "image",
+          content: "",
+          imageDataUrl: src,
+          imageAspect: attrs?.aspect ? Number(attrs.aspect) : undefined,
+          imageSourceUrl: (attrs?.sourceUrl as string | undefined) ?? undefined,
+        });
+      }
+      // else: blob: URL with no blob map entry → orphan, drop.
     } else if (node.type === "video") {
       const attrs = node.attrs as Record<string, unknown> | undefined;
       const blockId = (attrs?.blockId as string | undefined) ?? "";

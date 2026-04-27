@@ -121,15 +121,16 @@ export const ImageWithAspect = BaseImage.extend({
           return { "data-source-url": String(attrs.sourceUrl) };
         },
       },
-      // Original full-fidelity source (e.g. PNG before client-side
-      // re-encoding to AVIF/WebP). Used by the Download action to save
-      // the HD copy instead of the compressed display copy.
-      srcOriginal: {
+      // The originating NoteBlock id. Round-tripped through HTML so
+      // htmlToBlocks can re-attach the Blob from the editor's image
+      // map (URL.createObjectURL strings aren't a stable source-of-
+      // truth; the map is).
+      blockId: {
         default: null,
-        parseHTML: (el: HTMLElement) => el.getAttribute("data-src-original"),
+        parseHTML: (el: HTMLElement) => el.getAttribute("data-block-id"),
         renderHTML: (attrs: Record<string, unknown>) => {
-          if (!attrs.srcOriginal) return {};
-          return { "data-src-original": String(attrs.srcOriginal) };
+          if (!attrs.blockId) return {};
+          return { "data-block-id": String(attrs.blockId) };
         },
       },
     };

@@ -66,7 +66,7 @@ async function fetchAndBuildBlock(apiUrl: string, sourceUrl: string): Promise<Ur
   if (!imgRes.ok) return null;
   const sourceBlob = await imgRes.blob();
   // eslint-disable-next-line no-console
-  console.log("[urlScreenshot] received blob type:", sourceBlob.type, "size:", sourceBlob.size);
+  console.log(`[urlScreenshot] received ${sourceBlob.type} ${kb(sourceBlob.size)} KB`);
   // Microlink returns JPEG when we ask for it (their docs); fall back to
   // re-encoding from PNG client-side if not. The HD source kept on the
   // block (for Download) is the JPEG itself — much lighter than PNG with
@@ -77,26 +77,23 @@ async function fetchAndBuildBlock(apiUrl: string, sourceUrl: string): Promise<Ur
   const hdBlob = sourceBlob;
   // Display copy: WebP encoded from the lossless PNG, downscaled to
   // a max 2000px wide. Our open-card width is 1000 CSS px, so 2000
-  // covers 2× retina perfectly without paying for the 2880px native
-  // resolution Microlink delivers. The downscale halves the byte size
-  // AND quarters the pixels-to-decode at open time — the bottleneck on
-  // image-heavy hero pages.
+  // covers 2× retina perfectly.
   const DISPLAY_MAX_W = 2000;
   const displayW = Math.min(img.naturalWidth, DISPLAY_MAX_W);
   const displayBlob = await encodeFromImage(img, displayW, [
-    ["image/webp", 0.92],
+    ["image/webp", 0.9],
   ], hdBlob);
-  const displayUrl = await blobToDataUrl(displayBlob);
-  const originalUrl = await blobToDataUrl(hdBlob);
-  const aspect = await computeImageAspect(displayUrl);
+  const aspect = img.naturalHeight / img.naturalWidth;
 
   return {
     block: {
       id: uuid(),
       type: "image",
       content: "",
-      imageDataUrl: displayUrl,
-      imageDataUrlOriginal: originalUrl,
+      imageBlob: displayBlob,
+      imageMimeType: displayBlob.type || "image/webp",
+      imageBlobOriginal: hdBlob,
+      imageMimeTypeOriginal: hdBlob.type || "image/png",
       imageAspect: aspect,
       imageSourceUrl: sourceUrl,
     },
@@ -133,15 +130,17 @@ async function encodeFromImage(
   ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   for (const [type, quality] of candidates) {
     const out = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, type, quality));
-    // eslint-disable-next-line no-console
-    console.log(`[urlScreenshot] toBlob(${canvas.width}×${canvas.height} ${type}, q=${quality}) →`, out ? `${out.type} ${out.size}B` : "null");
     if (out && out.type === type) {
       // eslint-disable-next-line no-console
-      console.log(`[urlScreenshot] re-encoded ${fallback.size}B → ${out.size}B ${type} (q=${quality})`);
+      console.log(`[urlScreenshot] re-encoded ${kb(fallback.size)} KB → ${kb(out.size)} KB ${type} (q=${quality}, ${canvas.width}×${canvas.height})`);
       return out;
     }
   }
   return fallback;
+}
+
+function kb(bytes: number): string {
+  return (bytes / 1024).toFixed(0);
 }
 
 function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
@@ -151,27 +150,6 @@ function loadImageFromBlob(blob: Blob): Promise<HTMLImageElement> {
     img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image decode failed")); };
     img.src = url;
-  });
-}
-
-function blobToDataUrl(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
-  });
-}
-
-function computeImageAspect(dataUrl: string): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const aspect = img.naturalHeight / img.naturalWidth;
-      resolve(Number.isFinite(aspect) && aspect > 0 ? aspect : 1);
-    };
-    img.onerror = () => reject(new Error("Failed to decode screenshot image"));
-    img.src = dataUrl;
   });
 }
 

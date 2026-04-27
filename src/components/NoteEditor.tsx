@@ -40,12 +40,24 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // effect cycle can't revoke them out from under the editor.
   const videoBlobsRef = useRef<Map<string, Blob>>(new Map());
   const videoUrlsRef = useRef<Map<string, string>>(new Map());
+  // Image blob round-trip map. Same purpose as videoBlobsRef but stores
+  // both the display + HD-original blobs (and their MIME types) so the
+  // serializer can reattach them on save.
+  const imageBlobsRef = useRef<Map<string, { display?: Blob; original?: Blob; mimeType?: string; mimeTypeOriginal?: string }>>(new Map());
   // Debounce timer for the editor's onUpdate save. Cleared+flushed on unmount.
   const saveTimerRef = useRef<number | null>(null);
   for (const b of blocks) {
     if (b.type === "video" && b.videoBlob && !videoBlobsRef.current.has(b.id)) {
       videoBlobsRef.current.set(b.id, b.videoBlob);
       videoUrlsRef.current.set(b.id, getVideoUrl(b.id, b.videoBlob));
+    }
+    if (b.type === "image" && b.imageBlob && !imageBlobsRef.current.has(b.id)) {
+      imageBlobsRef.current.set(b.id, {
+        display: b.imageBlob,
+        original: b.imageBlobOriginal,
+        mimeType: b.imageMimeType,
+        mimeTypeOriginal: b.imageMimeTypeOriginal,
+      });
     }
   }
 
@@ -86,7 +98,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
         if (editorRef.current) {
-          onUpdate(htmlToBlocks(editorRef.current, videoBlobsRef.current));
+          onUpdate(htmlToBlocks(editorRef.current, videoBlobsRef.current, imageBlobsRef.current));
         }
       }
     };
@@ -156,7 +168,7 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
       if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
-        onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>, videoBlobsRef.current));
+        onUpdate(htmlToBlocks(editor as ReturnType<typeof useEditor>, videoBlobsRef.current, imageBlobsRef.current));
       }, 250);
     },
     onSelectionUpdate: ({ editor }) => {
@@ -728,10 +740,6 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     const target = getTargetBlock();
     if (!target) return;
     const { node } = target;
-    // Prefer the HD original (full-fidelity PNG kept alongside the
-    // compressed display copy on URL-screenshot cards) for download.
-    const src = (node.attrs.srcOriginal as string | null) ?? (node.attrs.src as string | null);
-    if (!src) return;
     const MIME_EXT: Record<string, string> = {
       "image/jpeg": "jpg",
       "image/png": "png",
@@ -747,20 +755,46 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
     };
     const extFrom = (mime: string | null | undefined, fallback: string) =>
       (mime && MIME_EXT[mime.toLowerCase()]) ?? fallback;
+
+    let href: string | null = null;
     let filename = "download";
     if (node.type.name === "image") {
-      const mime = /^data:(image\/[a-z0-9+.-]+)/i.exec(src)?.[1];
-      filename = `image-${Date.now()}.${extFrom(mime, "png")}`;
+      const blockId = node.attrs.blockId as string | null;
+      const meta = blockId ? imageBlobsRef.current.get(blockId) : undefined;
+      // Prefer the HD original blob for URL-screenshot cards; otherwise
+      // download the display copy. Fall back to the legacy data: URL
+      // for old blocks that haven't migrated to Blob storage.
+      const downloadBlob = meta?.original ?? meta?.display;
+      if (downloadBlob) {
+        href = URL.createObjectURL(downloadBlob);
+        const mime = meta?.mimeTypeOriginal ?? meta?.mimeType ?? downloadBlob.type;
+        filename = `image-${Date.now()}.${extFrom(mime, "png")}`;
+      } else {
+        const src = node.attrs.src as string | null;
+        if (!src) return;
+        href = src;
+        const mime = /^data:(image\/[a-z0-9+.-]+)/i.exec(src)?.[1];
+        filename = `image-${Date.now()}.${extFrom(mime, "png")}`;
+      }
     } else if (node.type.name === "video") {
+      const src = node.attrs.src as string | null;
+      if (!src) return;
+      href = src;
       const mime = node.attrs.mimeType as string | null;
       filename = `video-${Date.now()}.${extFrom(mime, "mp4")}`;
     }
+    if (!href) return;
     const a = document.createElement("a");
-    a.href = src;
+    a.href = href;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    if (href.startsWith("blob:")) {
+      // Cleanup the temporary download URL after a tick so the click
+      // has had a chance to fire.
+      setTimeout(() => { if (href) URL.revokeObjectURL(href); }, 1000);
+    }
   }, [editor, getTargetBlock]);
 
   // Run a handleBlock* action on the currently NodeSelected node by routing

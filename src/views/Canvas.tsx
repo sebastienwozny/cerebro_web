@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNotes } from "../store/useNotes";
 import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
-import { useOpenClose, DEFAULT_ANIM_TUNING, URL_CARD_ANIM_TUNING, type AnimTuning } from "../hooks/useOpenClose";
+import { useOpenClose, DEFAULT_ANIM_TUNING, type AnimTuning } from "../hooks/useOpenClose";
 import AnimTuningPanel from "../components/AnimTuningPanel";
 import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
@@ -494,14 +494,8 @@ export default function Canvas() {
   } = useCanvasMediaImport({ canvasLocked, windowSize, getTransform, createNote: createNoteAt });
 
   const handleCardTap = useCallback(
-    (noteId: string) => {
-      clearSelection();
-      const note = notes.find(n => n.id === noteId);
-      const header = note ? getHeaderMedia(note) : null;
-      const isUrlCard = header?.type === "image" && !!header.sourceUrl;
-      openNote(noteId, isUrlCard ? URL_CARD_ANIM_TUNING : undefined);
-    },
-    [openNote, clearSelection, notes]
+    (noteId: string) => { clearSelection(); openNote(noteId); },
+    [openNote, clearSelection]
   );
 
   const handleCardShiftTap = useCallback(

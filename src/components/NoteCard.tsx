@@ -175,6 +175,26 @@ function NoteCard({
 
   const isLightImage = useImageBrightness(headerDataUrl ?? undefined);
 
+  // Pre-decode the header image once at idle so the open animation
+  // doesn't pay the decode cost (especially noticeable on URL screenshot
+  // cards whose WebP source can be 1+ MB). The browser caches decoded
+  // pixels by `src`, so subsequent <img> instances with the same src
+  // (e.g. the hero image during the open animation) hit the cache.
+  useEffect(() => {
+    if (!headerDataUrl) return;
+    const cb = () => {
+      const probe = new Image();
+      probe.src = headerDataUrl;
+      probe.decode().catch(() => { /* aborted/replaced — harmless */ });
+    };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(cb);
+      return () => cancelIdleCallback(id);
+    }
+    const tid = setTimeout(cb, 200);
+    return () => clearTimeout(tid);
+  }, [headerDataUrl]);
+
   // Hero animation for media card close: capture header media screen rect
   // before overlay unmounts. Look for the first <img>/<video> in the editor.
   const closingImgRect = useRef<{ x: number; y: number; w: number; h: number } | null>(null);

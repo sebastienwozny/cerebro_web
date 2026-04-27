@@ -1,5 +1,6 @@
 import { CARD_W, CARD_H } from "../constants";
 import type { Note, NoteBlock } from "../store/db";
+import { getImageUrl } from "./imageUrlCache";
 
 export const IMAGE_CARD_BASE_W = 1200;
 
@@ -13,6 +14,16 @@ export type HeaderMedia =
       videoBlob: Blob;
       videoMimeType: string;
     };
+
+/** Resolve a usable `<img>` src for an image block. New blocks store the
+ *  display copy as a Blob (cheaper IndexedDB roundtrip + faster decode)
+ *  exposed as a session-scoped object URL. Legacy blocks still carry a
+ *  base64 `imageDataUrl` and use that directly. */
+function imageSrcFromBlock(block: NoteBlock): string | null {
+  if (block.imageBlob) return getImageUrl(block.id, block.imageBlob);
+  if (block.imageDataUrl) return block.imageDataUrl;
+  return null;
+}
 
 /** Check whether a note behaves as a media card (first block is image or video). */
 export function isMediaCard(note: Pick<Note, "blocks">): boolean {
@@ -28,20 +39,22 @@ export function isImageCard(note: Pick<Note, "blocks">): boolean {
 /** Extract the header image data from the first block, if it's an image. */
 export function getHeaderImage(note: Pick<Note, "blocks">): { dataUrl: string; aspect: number } | null {
   const block: NoteBlock | undefined = note.blocks[0];
-  if (block?.type === "image" && block.imageDataUrl) {
-    return { dataUrl: block.imageDataUrl, aspect: block.imageAspect ?? 1 };
-  }
-  return null;
+  if (block?.type !== "image") return null;
+  const src = imageSrcFromBlock(block);
+  if (!src) return null;
+  return { dataUrl: src, aspect: block.imageAspect ?? 1 };
 }
 
 /** Extract header media (image OR video) from the first block. */
 export function getHeaderMedia(note: Pick<Note, "blocks">): HeaderMedia | null {
   const block: NoteBlock | undefined = note.blocks[0];
   if (!block) return null;
-  if (block.type === "image" && block.imageDataUrl) {
+  if (block.type === "image") {
+    const src = imageSrcFromBlock(block);
+    if (!src) return null;
     return {
       type: "image",
-      dataUrl: block.imageDataUrl,
+      dataUrl: src,
       aspect: block.imageAspect ?? 1,
       sourceUrl: block.imageSourceUrl,
     };
