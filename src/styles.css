@@ -649,7 +649,8 @@ html, body, #root {
 .tiptap img {
   width: 100%;
   display: block;
-  margin: 12px 0;
+  margin-top: 12px;
+  margin-bottom: 32px;
   border-radius: 8px;
   transition: box-shadow 150ms;
 }
@@ -717,7 +718,7 @@ html, body, #root {
    the handle measures `.node-video` (direct child of `.tiptap`), so the
    line-height must be set here, not on `.video-block-wrap` inside.
    Formula: rect.top + (lineHeight - 24) / 2. */
-.tiptap .node-video { margin: 12px 0; line-height: 24px; }
+.tiptap .node-video { margin-top: 12px; margin-bottom: 32px; line-height: 24px; }
 .tiptap .video-block-wrap {
   width: 100%;
 }
