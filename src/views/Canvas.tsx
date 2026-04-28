@@ -3,8 +3,7 @@ import { createPortal } from "react-dom";
 import { useNotes } from "../store/useNotes";
 import { db, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
-import { useOpenClose, DEFAULT_ANIM_TUNING, type AnimTuning } from "../hooks/useOpenClose";
-import AnimTuningPanel from "../components/AnimTuningPanel";
+import { useOpenClose } from "../hooks/useOpenClose";
 import { useSpacePan } from "../hooks/useSpacePan";
 import { useWheelNavigation } from "../hooks/useWheelNavigation";
 import { useSelection } from "../hooks/useSelection";
@@ -68,9 +67,8 @@ export default function Canvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const windowSize = useWindowSize();
 
-  const [animTuning, setAnimTuning] = useState<AnimTuning>(DEFAULT_ANIM_TUNING);
   const { openNoteId, openProgress, isClosing, closingScrollOffset, openTransform, openNote, closeNote } =
-    useOpenClose(bringToFront, getTransform, animTuning);
+    useOpenClose(bringToFront, getTransform);
 
   const canvasLocked = openNoteId !== null;
   const { spaceHeld, handlePointerDown: spacePanDown, handlePointerMove: spacePanMove, handlePointerUp: spacePanUp } =
@@ -1097,10 +1095,6 @@ export default function Canvas() {
           Double-click to create a note
         </div>
       )}
-
-      {/* Dev tool: open/close animation tuning */}
-      <AnimTuningPanel value={animTuning} onChange={setAnimTuning} />
-
 
       {/* Context menu */}
       {contextMenu && !canvasLocked && (
