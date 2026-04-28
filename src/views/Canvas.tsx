@@ -14,7 +14,7 @@ import { useCanvasMediaImport } from "../hooks/useCanvasMediaImport";
 import { CanvasUndoStack, snapshotFromNote, noteFromSnapshot, type CanvasAction } from "../store/undoStack";
 import { getMediaClipboard } from "../store/mediaClipboard";
 import gsap from "gsap";
-import { DELETE_DURATION, CARD_W, GRID_GAP } from "../constants";
+import { DELETE_DURATION, CARD_W, GRID_GAP, OPEN_DURATION, CLOSE_DURATION } from "../constants";
 import { getCardSize, getHeaderMedia } from "../lib/cardDimensions";
 import NoteCard from "../components/NoteCard";
 import NoteEditor from "../components/NoteEditor";
@@ -837,11 +837,21 @@ export default function Canvas() {
       )}
 
       {/* Backdrop portaled to document.body — bypasses canvas-layer to
-          reliably cover the entire canvas at z:9998. */}
-      {openProgress > 0 && createPortal(
+          reliably cover the entire canvas at z:9998. Opacity is driven by
+          a CSS keyframe animation (compositor-thread, no per-frame JS
+          reconcile). The keyframe ramps to 1 in the first ~third of the
+          animation and holds, so the GPU can skip compositing the cards
+          underneath for the bulk of the animation. */}
+      {openNoteId !== null && createPortal(
         <div
           className="fixed inset-0 pointer-events-none bg-card-open"
-          style={{ opacity: openProgress, zIndex: 9998 }}
+          style={{
+            animation: isClosing
+              ? `backdropFadeOut ${CLOSE_DURATION}s ease-out forwards`
+              : `backdropFadeIn ${OPEN_DURATION}s ease-out forwards`,
+            willChange: "opacity",
+            zIndex: 9998,
+          }}
         />,
         document.body
       )}

@@ -152,6 +152,21 @@ html, body, #root {
   to { opacity: 1; transform: scale(1); }
 }
 
+/* Backdrop opacity ramps to 1 in the first ~third of OPEN_DURATION and
+   stays opaque for the rest, so the GPU can skip compositing the cards
+   underneath for ~2/3 of the animation (the dominant per-frame cost at
+   4K full-screen). On close, mirror: stay opaque ~2/3 then fade out. */
+@keyframes backdropFadeIn {
+  0%   { opacity: 0; }
+  35%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes backdropFadeOut {
+  0%   { opacity: 1; }
+  35%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
 @keyframes shadowFadeIn {
   from { box-shadow: 0 10px 20px -12px rgba(0,0,0,0), 0 32px 40px -8px rgba(0,0,0,0); }
   to { box-shadow: 0 10px 20px -12px rgba(0,0,0,0.05), 0 32px 40px -8px rgba(0,0,0,0.02); }
