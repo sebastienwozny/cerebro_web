@@ -180,6 +180,7 @@ function NoteCard({
     onResizeEnd,
     onInteractionStart,
     onResizeRelease: onHoverResizeEnd,
+    onBringToFront,
   });
 
   const isLightImage = useImageBrightness(headerDataUrl ?? undefined);

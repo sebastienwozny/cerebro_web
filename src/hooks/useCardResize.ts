@@ -13,6 +13,7 @@ interface Params {
   onResizeEnd?: (noteId: string, oldScale: number, oldPosX: number, oldPosY: number) => void;
   onInteractionStart: () => void;
   onResizeRelease: () => void;
+  onBringToFront: (noteId: string) => void;
 }
 
 /**
@@ -32,6 +33,7 @@ export function useCardResize({
   onResizeEnd,
   onInteractionStart,
   onResizeRelease,
+  onBringToFront,
 }: Params) {
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartRef = useRef({ pointerX: 0, startScale: 1, startPosX: 0, startPosY: 0, dirX: 1, dirY: 0 });
@@ -85,6 +87,7 @@ export function useCardResize({
       resizingRef.current = true;
       setIsResizing(true);
       onInteractionStart();
+      onBringToFront(noteId);
       resizeStartRef.current = {
         pointerX: e.clientX,
         startScale: cardScale,

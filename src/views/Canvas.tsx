@@ -197,6 +197,12 @@ export default function Canvas() {
         const currentPosY = currentNote?.positionY ?? action.oldPosY;
         const inverse: CanvasAction = { type: "resize", noteId: action.noteId, oldScale: currentScale, oldPosX: currentPosX, oldPosY: currentPosY };
         const obj = { scale: currentScale, posX: currentPosX, posY: currentPosY };
+        // Use the visual-only resizeOverride during the animation (same
+        // pattern as live resize). Writing to Dexie per gsap frame would
+        // re-trigger useNotes' liveQuery, which re-reads every note —
+        // including any Blob columns. For a 20MB video that's hundreds of
+        // MB/s of churn over the 0.35s tween. Commit to the DB once at
+        // the end instead.
         await new Promise<void>(resolve => {
           gsap.to(obj, {
             scale: action.oldScale,
@@ -204,10 +210,28 @@ export default function Canvas() {
             posY: action.oldPosY,
             duration: 0.35,
             ease: "power2.out",
-            onUpdate: () => { db.notes.update(action.noteId, { cardScale: obj.scale, positionX: obj.posX, positionY: obj.posY }); },
+            onUpdate: () => {
+              resizeOverrideRef.current = { noteId: action.noteId, cardScale: obj.scale, positionX: obj.posX, positionY: obj.posY };
+              if (!resizeRafRef.current) {
+                resizeRafRef.current = requestAnimationFrame(() => {
+                  resizeRafRef.current = 0;
+                  setResizeOverride(resizeOverrideRef.current);
+                });
+              }
+            },
             onComplete: resolve,
           });
         });
+        if (resizeRafRef.current) {
+          cancelAnimationFrame(resizeRafRef.current);
+          resizeRafRef.current = 0;
+        }
+        await db.notes.update(action.noteId, { cardScale: action.oldScale, positionX: action.oldPosX, positionY: action.oldPosY });
+        // Two frames for Dexie's liveQuery to propagate before clearing
+        // the override (otherwise the card snaps to its pre-resize size).
+        await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+        resizeOverrideRef.current = null;
+        setResizeOverride(null);
         return inverse;
       }
       case "create": {
