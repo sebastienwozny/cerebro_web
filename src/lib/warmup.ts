@@ -1,4 +1,4 @@
-import { db } from "../store/db";
+import { db, preloadAllBlobs } from "../store/db";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
 import TaskList from "@tiptap/extension-task-list";
@@ -16,8 +16,9 @@ export function warmup() {
   // Safari doesn't support requestIdleCallback — setTimeout(0) is equivalent enough here.
   const schedule = typeof requestIdleCallback !== "undefined" ? requestIdleCallback : (cb: () => void) => setTimeout(cb, 0);
   schedule(() => {
-    // 1. Eagerly open IndexedDB
-    db.open();
+    // 1. Eagerly open IndexedDB and preload blobs into the in-memory cache
+    // so useNotes can hydrate inline Blob fields synchronously per render.
+    db.open().then(() => preloadAllBlobs());
 
     // 2. Create a throwaway TipTap editor to compile the ProseMirror schema & plugins
     const el = document.createElement("div");

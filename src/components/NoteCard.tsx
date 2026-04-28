@@ -8,6 +8,7 @@ import { useImageBrightness } from "../hooks/useImageBrightness";
 import { CARD_CONTENT_W } from "../constants";
 import { getCardSize, getHeaderMedia, getOpenMediaSize, OPEN_MEDIA_MAX_W } from "../lib/cardDimensions";
 import PersistentVideoPlayer, { prewarmAudio } from "./PersistentVideoPlayer";
+import { IS_SAFARI } from "../lib/browser";
 
 interface Props {
   note: Note;
@@ -722,7 +723,19 @@ function NoteCard({
         // Always pause while a card is being moved (this card directly via
         // isDragging, or as a follower in a group drag via isFollowing).
         const beingMoved = isDragging || isFollowing;
-        const playing = !beingMoved && !!(playingHover || isShadowInstance || t > 0 || isResizing || isClosing || isSelected);
+        // Auto-play on selection: Chrome handles many simultaneous video
+        // decoders fine, so selecting (and Cmd+A in particular) plays them
+        // all as a preview. Safari can't keep up — autoplay rejections
+        // pile up and pan/zoom tank — so we gate `isSelected` on
+        // !IS_SAFARI. Hover-play and open-state-play work everywhere.
+        const playing = !beingMoved && !!(
+          playingHover ||
+          isShadowInstance ||
+          t > 0 ||
+          isResizing ||
+          isClosing ||
+          (!IS_SAFARI && isSelected)
+        );
         const unlocked = editing;
         const pointerEvents = editing ? "auto" : "none";
 
@@ -756,7 +769,11 @@ function NoteCard({
             transformTransition={t === 0 && !isDragging && !isFollowing && !isResizing}
             isDeleting={isDeleting}
             isPopping={!!isPopping}
-            showPoster={false}
+            // At canvas-rest with the video paused (hover-out), hide the
+            // PVP canvas so the underlying poster <img> shows through —
+            // Safari sometimes doesn't redraw the canvas after pause+seek
+            // and would freeze on the last-played frame.
+            showPoster={!playing && t === 0}
           >
             {cornerOverlay}
           </PersistentVideoPlayer>

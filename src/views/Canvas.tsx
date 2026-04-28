@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNotes } from "../store/useNotes";
-import { db, type Note, type NoteBlock } from "../store/db";
+import { db, safeUpdateNote, type Note, type NoteBlock } from "../store/db";
 import { useCanvas } from "../store/useCanvas";
 import { useOpenClose } from "../hooks/useOpenClose";
 import { useSpacePan } from "../hooks/useSpacePan";
@@ -169,7 +169,7 @@ export default function Canvas() {
         });
         await db.transaction("rw", db.notes, async () => {
           for (const t of targets) {
-            await db.notes.update(t.noteId, { positionX: t.toX, positionY: t.toY });
+            await safeUpdateNote(t.noteId, { positionX: t.toX, positionY: t.toY });
           }
         });
         await new Promise(r => requestAnimationFrame(() => r(undefined)));
@@ -226,7 +226,7 @@ export default function Canvas() {
           cancelAnimationFrame(resizeRafRef.current);
           resizeRafRef.current = 0;
         }
-        await db.notes.update(action.noteId, { cardScale: action.oldScale, positionX: action.oldPosX, positionY: action.oldPosY });
+        await safeUpdateNote(action.noteId, { cardScale: action.oldScale, positionX: action.oldPosX, positionY: action.oldPosY });
         // Two frames for Dexie's liveQuery to propagate before clearing
         // the override (otherwise the card snaps to its pre-resize size).
         await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -343,7 +343,7 @@ export default function Canvas() {
     // there's no visual jump while Dexie's liveQuery propagates.
     await db.transaction("rw", db.notes, async () => {
       for (const t of targets) {
-        await db.notes.update(t.noteId, { positionX: t.toX, positionY: t.toY });
+        await safeUpdateNote(t.noteId, { positionX: t.toX, positionY: t.toY });
       }
     });
     // One paint after DB commit so React renders cards at note.positionX

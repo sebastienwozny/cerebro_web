@@ -15,7 +15,16 @@ export function snapshotFromNote(note: Note): NoteSnapshot {
 export function noteFromSnapshot(snap: NoteSnapshot): Note {
   return {
     ...snap,
-    blocks: snap.blocks.map(b => ({ ...b })),
+    // Strip runtime-hydrated Blob fields. The persisted form keeps only
+    // the blob id refs (imageBlobId etc.); the actual Blob is re-attached
+    // on the next useNotes hydration via the in-memory blob cache.
+    blocks: snap.blocks.map((b) => {
+      const next = { ...b };
+      delete next.imageBlob;
+      delete next.imageBlobOriginal;
+      delete next.videoBlob;
+      return next;
+    }),
     createdAt: new Date(snap.createdAt),
   };
 }
