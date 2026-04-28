@@ -1,5 +1,5 @@
 import { useGesture } from "@use-gesture/react";
-import { PAN_MULTIPLIER, ZOOM_SENSITIVITY } from "../constants";
+import { PAN_MULTIPLIER, ZOOM_SENSITIVITY_PINCH, ZOOM_SENSITIVITY_WHEEL } from "../constants";
 
 /** Canvas wheel + pinch gestures via @use-gesture/react.
  *
@@ -28,11 +28,18 @@ export function useWheelNavigation(
         event.preventDefault();
         if (canvasLocked) return;
         if (ctrlKey || event.metaKey) {
+          // Distinguish discrete-wheel devices (Magic Mouse, classic mouse
+          // wheel — deltaY is integer because the OS quantizes wheel detents)
+          // from trackpad-pinch (Chrome emits ctrl+wheel with fractional
+          // deltaY for trackpad gestures). The two need different zoom
+          // sensitivities to feel comparable in speed.
+          const isDiscreteWheel = Number.isInteger(dy) && Math.abs(dy) >= 1;
+          const sensitivity = isDiscreteWheel ? ZOOM_SENSITIVITY_WHEEL : ZOOM_SENSITIVITY_PINCH;
           // Clamp avoids massive single-step zoom from Chrome's trackpad-pinch
           // emulation, which can fire WheelEvents with deltaY up to ~100.
           const maxDy = 10;
           const clampedDy = Math.max(-maxDy, Math.min(maxDy, dy));
-          const factor = Math.pow(ZOOM_SENSITIVITY, clampedDy);
+          const factor = Math.pow(sensitivity, clampedDy);
           zoomBySmooth(factor, event.clientX, event.clientY, windowW, windowH);
           return;
         }

@@ -21,7 +21,14 @@ export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 3;
 
 // Canvas interaction tuning
-export const ZOOM_SENSITIVITY = 0.995;
+// Trackpad pinch in Chrome is emulated as ctrl+wheel with high event rate
+// and small fractional deltas — needs higher per-event sensitivity to feel
+// responsive. Magic Mouse ctrl+scroll fires rare integer-delta events; it
+// needs lower per-event sensitivity or the canvas snaps too far per click.
+export const ZOOM_SENSITIVITY_PINCH = 0.99;
+export const ZOOM_SENSITIVITY_WHEEL = 0.995;
+// Backward-compat alias still used by useCanvas.zoom().
+export const ZOOM_SENSITIVITY = ZOOM_SENSITIVITY_PINCH;
 export const PAN_MULTIPLIER = 1.0;
 // Time constant (ms) for canvas pan/zoom smoothing toward the input target.
 // Smaller = snappier (less inertia); larger = more "trailing" feel.
