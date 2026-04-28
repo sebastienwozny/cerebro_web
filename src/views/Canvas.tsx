@@ -878,12 +878,15 @@ export default function Canvas() {
               : note;
 
           // Viewport culling — visibility is precomputed in `visibleNoteIds`.
-          // Cards in resize/group-drag use overridden positions but we want
-          // them to render regardless (the `inGroupDrag`/selectedIds checks
-          // below force them through), so the precomputed cull on `note`'s
-          // base position is sufficient.
+          // Force-render only cases that genuinely need an off-viewport DOM
+          // node: in-flight group drag (positions tracked via groupDragStartRef),
+          // delete/pop animations, and video open shadow instance. Selected-but-
+          // not-dragging cards stay culled — keeping them in DOM at huge
+          // selections (e.g. Cmd+A while zoomed in) flooded React with
+          // off-screen re-renders on every zoom step, producing visible
+          // glitching during dezoom.
           const isVisible = visibleNoteIds.has(note.id);
-          if (!isVisible && !selectedIds.has(note.id) && !deletingIds.has(note.id) && !inGroupDrag && !popIds.has(note.id) && !isVideoOpening) return null;
+          if (!isVisible && !deletingIds.has(note.id) && !inGroupDrag && !popIds.has(note.id) && !isVideoOpening) return null;
           const ox = transformRef.current.offsetX;
           const oy = transformRef.current.offsetY;
 
