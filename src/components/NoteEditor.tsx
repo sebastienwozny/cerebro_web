@@ -386,18 +386,25 @@ export default function NoteEditor({ blocks, onUpdate, editable }: Props) {
   // (selection ring) before the effect removes it — visible in Electron
   // (1ms flash) where the paint timing is slightly tighter than Chrome.
   useLayoutEffect(() => {
-    if (editor) {
-      editor.setEditable(editable);
-      if (editable) {
-        const firstType = editor.getJSON().content?.[0]?.type;
-        const hasHeaderImage = firstType === "image" || firstType === "video";
-        if (hasHeaderImage) {
-          editor.chain().setTextSelection(0).blur().run();
-        } else {
-          editor.commands.setTextSelection(0);
-          (editor.view.dom as HTMLElement).focus({ preventScroll: true });
-        }
+    if (!editor) return;
+    if (editable) {
+      const firstType = editor.getJSON().content?.[0]?.type;
+      const hasHeaderImage = firstType === "image" || firstType === "video";
+      if (hasHeaderImage) {
+        // Order matters: collapse selection + blur BEFORE flipping
+        // editable. Otherwise the editor renders one frame in
+        // editable=true state with whatever default selection ProseMirror
+        // landed on (often a NodeSelection on the leading image), which
+        // shows the `.ProseMirror-selectednode` ring momentarily.
+        editor.chain().setTextSelection(0).blur().run();
+        editor.setEditable(true);
+      } else {
+        editor.setEditable(true);
+        editor.commands.setTextSelection(0);
+        (editor.view.dom as HTMLElement).focus({ preventScroll: true });
       }
+    } else {
+      editor.setEditable(false);
     }
   }, [editor, editable]);
 

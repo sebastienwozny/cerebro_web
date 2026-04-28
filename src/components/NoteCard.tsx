@@ -658,7 +658,12 @@ function NoteCard({
               borderRadius: lerp(cardRadius * scale, 8, t),
             }}
             draggable={false}
-            decoding="async"
+            // decoding="sync" so the first paint of the hero image at the
+            // start of the open animation has the bitmap ready. Safari
+            // doesn't reuse the canvas-rest <img>'s decoded pixels for the
+            // freshly-mounted hero <img> (each element decodes
+            // independently); with async we'd flash a blank frame.
+            decoding="sync"
           />,
           document.body,
         );
