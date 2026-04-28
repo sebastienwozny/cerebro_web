@@ -64,7 +64,7 @@ function OpenCardContent({
 
 export default function Canvas() {
   const { notes, addNote, updateNote, deleteNote, duplicateNote, bringToFront } = useNotes();
-  const { transformRef, transformVersion, layerRef, pan, zoom, getTransform, applyTransform } = useCanvas();
+  const { transformRef, transformVersion, layerRef, pan, panSmooth, zoomBySmooth, getTransform, applyTransform } = useCanvas();
   const containerRef = useRef<HTMLDivElement>(null);
   const windowSize = useWindowSize();
 
@@ -76,7 +76,7 @@ export default function Canvas() {
   const { spaceHeld, handlePointerDown: spacePanDown, handlePointerMove: spacePanMove, handlePointerUp: spacePanUp } =
     useSpacePan(canvasLocked, pan, getTransform);
 
-  useWheelNavigation(containerRef, canvasLocked, windowSize.w, windowSize.h, pan, zoom);
+  useWheelNavigation(containerRef, canvasLocked, windowSize.w, windowSize.h, panSmooth, zoomBySmooth);
 
   const {
     selectedIds, setSelectedIds, marquee,
@@ -818,6 +818,7 @@ export default function Canvas() {
       className="w-full h-full relative overflow-hidden bg-canvas"
       style={{
         cursor: spaceHeld ? "grab" : marquee ? "crosshair" : "default",
+        overscrollBehavior: "none",
       }}
       onDoubleClick={handleDoubleClick}
       onPointerDown={handleCanvasPointerDown}

@@ -21,6 +21,11 @@ export const MIN_SCALE = 0.1;
 export const MAX_SCALE = 3;
 
 // Canvas interaction tuning
-export const ZOOM_SENSITIVITY = 0.99;
-export const PAN_MULTIPLIER = 1.3;
+export const ZOOM_SENSITIVITY = 0.995;
+export const PAN_MULTIPLIER = 1.0;
+// Time constant (ms) for canvas pan/zoom smoothing toward the input target.
+// Smaller = snappier (less inertia); larger = more "trailing" feel.
+// 60–80ms is the sweet spot for "fluid but responsive". Display-rate
+// independent (interpolation uses dt-based exponential decay).
+export const CANVAS_SMOOTH_TAU_MS = 30;
 export const DRAG_LERP_FACTOR = 0.35;
