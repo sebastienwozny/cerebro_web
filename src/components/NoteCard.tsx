@@ -503,24 +503,27 @@ function NoteCard({
               text cards we mask the bottom 200px regardless of
               openProgress; the wrapper unmounts at `editing=true` and
               the editor overlay takes over. */}
-          {!editing && (!isImageCard || (isClosing && t > 0)) && (
+          {!editing && (!isImageCard || (isClosing && t > 0)) && (() => {
+            // Bottom fade size shrinks as the card opens, so the mask
+            // dissolves smoothly rather than popping off when the wrapper
+            // unmounts at `editing=true`.
+            const fadePx = Math.round(200 * (1 - t));
+            const maskGradient = `linear-gradient(to bottom, black 0, black calc(100% - ${fadePx}px), transparent 100%)`;
+            return (
             <div
               className="absolute inset-0 flex justify-center pointer-events-none pt-25"
               style={{
                 transform: closingScrollY ? `translateY(${closingScrollY}px)` : "none",
-                maskImage: !isImageCard
-                  ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
-                  : undefined,
-                WebkitMaskImage: !isImageCard
-                  ? "linear-gradient(to bottom, black 0, black calc(100% - 200px), transparent 100%)"
-                  : undefined,
+                maskImage: !isImageCard ? maskGradient : undefined,
+                WebkitMaskImage: !isImageCard ? maskGradient : undefined,
               }}
             >
               <div className={isImageCard ? "image-card-closing" : undefined} style={{ width: CARD_CONTENT_W, ...(isImageCard ? { "--text-fade": t } as React.CSSProperties : {}) }}>
                 {children}
               </div>
             </div>
-          )}
+            );
+          })()}
 
         </div>
         {/* Close clipped card content */}

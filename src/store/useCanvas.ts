@@ -179,24 +179,12 @@ export function useCanvas() {
     [startAnimating, scheduleSave]
   );
 
-  const zoomBySmooth = useCallback(
-    (factor: number, cx: number, cy: number, windowW: number, windowH: number) => {
-      // Anchor zoom around the cursor in TARGET space (not current) so
-      // back-to-back pinch events compose consistently — otherwise each
-      // event would pull the target back toward the in-flight current.
-      const tg = targetRef.current;
-      const newScale = snapScale(Math.min(MAX_SCALE, Math.max(MIN_SCALE, tg.scale * factor)));
-      const cursorFromCenterX = cx - windowW / 2;
-      const cursorFromCenterY = cy - windowH / 2;
-      const ratio = newScale / tg.scale;
-      tg.offsetX = cursorFromCenterX - ratio * (cursorFromCenterX - tg.offsetX);
-      tg.offsetY = cursorFromCenterY - ratio * (cursorFromCenterY - tg.offsetY);
-      tg.scale = newScale;
-      startAnimating();
-      scheduleSave();
-    },
-    [startAnimating, scheduleSave]
-  );
+  // Zoom is intentionally NOT smoothed: at 4K with many cards, smoothing
+  // multiplies the per-event paint cost by the lerp's frame count and makes
+  // Magic Mouse Ctrl+scroll feel laggy. Pan stays smoothed because its
+  // per-frame work is cheap (CSS var update only, no card content
+  // invalidation).
+  const zoomBySmooth = zoomBy;
 
   const zoom = useCallback(
     (delta: number, cx: number, cy: number, windowW: number, windowH: number) => {
